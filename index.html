@@ -1,0 +1,1425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shield</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #111;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 24px;
+    }
+
+    /* ─────────────────────────────────────────────────────
+       VERSION SWITCHER (off-frame)
+    ───────────────────────────────────────────────────── */
+    .switcher {
+      display: flex;
+      gap: 6px;
+      background: rgba(255,255,255,0.06);
+      border: 0.5px solid rgba(255,255,255,0.1);
+      border-radius: 999px;
+      padding: 4px;
+    }
+    .switcher__btn {
+      font-family: 'ABC Diatype Mono', monospace;
+      font-weight: 700;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      border: none;
+      border-radius: 999px;
+      padding: 7px 14px;
+      cursor: pointer;
+      transition: background 0.18s ease, color 0.18s ease;
+      background: transparent;
+      color: rgba(255,255,255,0.36);
+    }
+    .switcher__btn.active {
+      background: #fff;
+      color: #090707;
+    }
+
+    /* ─────────────────────────────────────────────────────
+       SCREEN WRAPPER
+    ───────────────────────────────────────────────────── */
+    .screen {
+      position: relative;
+      width: 360px;
+      height: 640px;
+    }
+
+    /* hide inactive card */
+    .card { display: none; }
+    .card.active { display: block; }
+
+    /* ─────────────────────────────────────────────────────
+       SHARED CARD BASE
+    ───────────────────────────────────────────────────── */
+    .card {
+      width: 360px;
+      height: 640px;
+      background: #090707;
+      border: 0.5px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* ── Shared Header ── */
+    .header {
+      position: absolute;
+      top: -0.5px;
+      left: -0.5px;
+      width: 360px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 20px;
+    }
+    .header__title {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 24px;
+      line-height: 1.1;
+      letter-spacing: -0.48px;
+      color: #fff;
+    }
+    .header__close {
+      position: absolute;
+      top: 50%;
+      right: 20px;
+      transform: translateY(-50%);
+      background: rgba(255,255,255,0.05);
+      border-radius: 999px;
+      padding: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+
+    /* ═══════════════════════════════════════════════════
+       V1 — BALANCE / SLIDER SCREEN
+    ═══════════════════════════════════════════════════ */
+
+    /* Gradient overlay (sits behind cards, contains slider) */
+    .v1-overlay {
+      position: absolute;
+      top: 79.5px;
+      left: 15.5px;
+      width: 328px;
+      height: 372px;
+      border-radius: 24px;
+      background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.08) 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 232px 20px 20px;
+    }
+
+    /* Slider track */
+    .v1-slider {
+      height: 40px;
+      width: 288px;
+      background: rgba(255,255,255,0.09);
+      border-radius: 22px;
+      position: relative;
+      flex-shrink: 0;
+      cursor: pointer;
+      user-select: none;
+    }
+    .v1-slider__ticks {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 250px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      opacity: 0.2;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .tick {
+      width: 3px; height: 3px;
+      background: #d9d9d9;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    /* Coloured fill — clips the gradient image to the active width */
+    .v1-slider__fill {
+      position: absolute;
+      left: 0; top: 0;
+      height: 100%;
+      width: 100%; /* updated via JS */
+      border-radius: 22px;
+      overflow: hidden;
+      pointer-events: none;
+      box-shadow: inset 0 2px 28px rgba(255,255,255,0.45);
+      z-index: 1;
+    }
+    .v1-slider__fill-bg {
+      /* always 288px wide so gradient doesn't stretch as fill changes */
+      position: absolute;
+      left: 0; top: 0;
+      width: 288px;
+      height: 100%;
+      object-fit: cover;
+      background: linear-gradient(90deg, #7c3aed 0%, #db2777 50%, #f97316 100%);
+    }
+    /* Draggable thumb pill */
+    .v1-slider__thumb {
+      position: absolute;
+      top: 4px;
+      /* left set via JS */
+      width: 40px;
+      height: 32px;
+      background: white;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.04);
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2;
+      box-shadow: inset 0 0 6px rgba(255,255,255,0.32);
+      cursor: grab;
+    }
+    .v1-slider__thumb:active { cursor: grabbing; }
+    .v1-slider__pill-label {
+      font-family: 'ABC Diatype Mono', monospace;
+      font-weight: 700;
+      font-size: 11px;
+      line-height: 1;
+      letter-spacing: 0.66px;
+      text-transform: uppercase;
+      color: #090707;
+      pointer-events: none;
+    }
+
+    /* Balance cards row */
+    .v1-cards {
+      position: absolute;
+      top: 81.5px;
+      left: 21.5px;
+      height: 292px;
+      display: flex;
+      align-items: center;
+      z-index: 1;
+    }
+    .v1-bal-card {
+      width: 154px;
+      height: 100%;
+      background: rgba(255,255,255,0.04);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 0;
+      flex-shrink: 0;
+    }
+    .v1-bal-card__label {
+      font-family: 'ABC Diatype Mono', monospace;
+      font-weight: 500;
+      font-size: 11px;
+      line-height: 1;
+      letter-spacing: 0.33px;
+      text-transform: uppercase;
+      color: #fff;
+      text-align: center;
+    }
+    .v1-bal-card__amount {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+    .v1-bal-card__amount input {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 20px;
+      line-height: 1.2;
+      letter-spacing: -0.4px;
+      color: #fff;
+      background: transparent;
+      border: none;
+      outline: none;
+      text-align: center;
+      width: 4ch;
+      padding: 0;
+      caret-color: #fff;
+      min-width: 1ch;
+    }
+    .v1-bal-card__amount span {
+      display: block;
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 20px;
+      line-height: 1.2;
+      letter-spacing: -0.4px;
+      color: rgba(255,255,255,0.32);
+      text-align: center;
+    }
+    .v1-bal-card__usd {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .v1-bal-card__usd-val {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      line-height: 1;
+      letter-spacing: 0.13px;
+      color: rgba(255,255,255,0.48);
+    }
+    .v1-bal-card__usd-icon { width: 13px; height: 11px; }
+    /* Divider between cards */
+    .v1-cards-div {
+      width: 8px;
+      height: 42px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .v1-cards-div__inner {
+      transform: rotate(-90deg);
+      width: 42px;
+      height: 8px;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .v1-cards-div__inner img {
+      position: absolute;
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Token row */
+    .v1-token-row {
+      position: absolute;
+      top: 467.5px;
+      left: 19.5px;
+      width: 320px;
+      height: fit-content;
+      background: rgba(255,255,255,0.08);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px 12px 8px;
+    }
+    .v1-token-row__left { display: flex; align-items: center; gap: 12px; }
+    .v1-token-icon {
+      width: 32px; height: 32px;
+      background: #090707;
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .v1-token-icon img {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 32px; height: 32.008px;
+    }
+    .v1-token-name {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      line-height: 1;
+      letter-spacing: 0.3px;
+      color: #fff;
+      text-transform: uppercase;
+    }
+    .v1-token-bal {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 500;
+      font-size: 13px;
+      line-height: 1;
+      letter-spacing: 0.13px;
+      color: rgba(255,255,255,0.48);
+      margin-top: 4px;
+    }
+    .v1-token-updown {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      opacity: 0.48;
+    }
+    .v1-token-updown svg { display: block; }
+
+    /* CTA */
+    .v1-cta {
+      position: absolute;
+      top: 570px;
+      left: 19.5px;
+      width: 320px;
+      height: 48px;
+      background: #fff;
+      border-radius: 999px;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      opacity: 0.5;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
+    }
+    .v1-cta.is-active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .v1-cta__label {
+      font-family: 'ABC Diatype Mono', monospace;
+      font-weight: 700;
+      font-size: 15px;
+      line-height: 1;
+      letter-spacing: 0.45px;
+      text-transform: uppercase;
+      color: #090707;
+    }
+
+
+    /* ═══════════════════════════════════════════════════
+       V2 — AMOUNT INPUT SCREEN
+    ═══════════════════════════════════════════════════ */
+
+    .v2-overlay {
+      position: absolute;
+      top: 85.5px;
+      left: 15.5px;
+      width: 328px;
+      height: 291px;
+      border-radius: 24px;
+      background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.08) 100%);
+      padding: 56px 52px 132px 56px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    /* Amount input */
+    .v2-amount {
+      display: flex;
+      align-items: baseline;
+      white-space: nowrap;
+    }
+    .v2-amount__input {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 32px;
+      line-height: 0.92;
+      letter-spacing: -1.28px;
+      color: #fff;
+      background: transparent;
+      border: none;
+      outline: none;
+      text-align: right;
+      width: 1ch;
+      padding: 0;
+      caret-color: #fff;
+    }
+    .v2-amount__ticker {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 32px;
+      line-height: 0.92;
+      letter-spacing: -1.28px;
+      color: rgba(255,255,255,0.32);
+      margin-left: 0.25em;
+    }
+
+    /* USD row */
+    .v2-usd {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .v2-usd__val {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      line-height: 1;
+      letter-spacing: 0.13px;
+      color: rgba(255,255,255,0.48);
+    }
+    .v2-usd__icon { width: 13px; height: 11px; }
+
+    /* % presets */
+    .v2-pct-row { display: flex; align-items: center; gap: 4px; width: 100%; }
+    .v2-pct-btn {
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      background: rgba(255,255,255,0.08);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      line-height: 1;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    /* Shield/Unshield segmented control */
+    .v2-toggle {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 304px;
+      height: 48px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 40px;
+      display: flex;
+      gap: 4px;
+      padding: 8px;
+    }
+    .v2-toggle__pill {
+      position: absolute;
+      top: 8px; left: 8px;
+      width: 142px;
+      height: 32px;
+      background: #fff;
+      border-radius: 24px;
+      transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none;
+    }
+    .v2-toggle__pill--right { transform: translateX(146px); }
+    .v2-toggle__btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 24px;
+      font-family: 'ABC Diatype Mono', monospace;
+      font-weight: 700;
+      font-size: 13px;
+      line-height: 1;
+      letter-spacing: 0.39px;
+      text-transform: uppercase;
+      border: none;
+      cursor: pointer;
+      padding: 12px;
+      background: transparent;
+      position: relative;
+      z-index: 1;
+      transition: color 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .v2-toggle__btn--active  { color: #090707; }
+    .v2-toggle__btn--inactive { color: rgba(255,255,255,0.48); }
+
+    /* Bottom info */
+    .v2-bottom-info {
+      position: absolute;
+      top: 384.5px;
+      left: 15.5px;
+    }
+    .v2-token-selector {
+      width: 328px;
+      height: 129px;
+      background: linear-gradient(to bottom, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 100%);
+      border-radius: 24px;
+      padding: 16px 20px 73px;
+      position: relative;
+    }
+    .v2-token-row { display: flex; align-items: center; gap: 8px; width: 288px; }
+    .v2-token-row__left { display: flex; align-items: center; gap: 12px; flex: 1; }
+    .v2-token-icon {
+      width: 40px; height: 40px;
+      background: #090707;
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .v2-token-icon img {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 32px; height: 32.008px;
+    }
+    .v2-token-name {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      line-height: 1;
+      letter-spacing: 0.3px;
+      color: #fff;
+      text-transform: uppercase;
+    }
+    .v2-token-arrow-wrap {
+      width: 20px; height: 20px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.48;
+      transform: scaleX(-1) rotate(90deg);
+    }
+    .v2-token-arrow-vector { width: 11px; height: 7px; display: block; }
+
+    .v2-amounts-bar {
+      position: absolute;
+      bottom: -8px;
+      left: 0px;
+      display: flex;
+      width: 328px; height: 65px;
+      background: linear-gradient(to bottom, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0) 100%);
+      border-radius: 16px;
+      padding: 16px;
+    }
+    .v2-amounts-inner { position: relative; width: 100%; height: 33px; }
+    .v2-amounts-div {
+      position: absolute;
+      left: 144px; top: 1px;
+      width: 1px; height: 28px;
+      background: rgba(255,255,255,0.2);
+    }
+    .v2-amounts-label {
+      font-family: 'ABC Diatype Mono', monospace;
+      font-weight: 500;
+      font-size: 11px;
+      line-height: 1;
+      letter-spacing: 0.33px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.48);
+    }
+    .v2-amounts-val {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      line-height: 1.4;
+      letter-spacing: 0.13px;
+      color: #fff;
+      margin-top: 4px;
+    }
+    .v2-amounts-pub { position: absolute; top: 0; left: 0; }
+    .v2-amounts-shld { position: absolute; top: 0; right: 0; text-align: right; }
+
+    /* ═══════════════════════════════════════════════════
+       V3 — VERTICAL BALANCE SLIDERS
+    ═══════════════════════════════════════════════════ */
+
+    .v3-overlay {
+      position: absolute;
+      top: 62px;
+      bottom: 68px;
+      left: 15.5px;
+      width: 328px;
+      background: linear-gradient(to bottom, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 100%);
+      border-radius: 16px;
+      pointer-events: none;
+    }
+
+    .v3-token-row {
+      position: absolute;
+      top: 78px;
+      left: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 304px;
+    }
+    .v3-token-row__left { display: flex; align-items: center; gap: 12px; }
+
+    .v3-cards {
+      position: absolute;
+      top: 125px;
+      bottom: 76px; /* 20px gap + 48px button + 8px breathing room */
+      left: 20px;
+      right: 20px;
+      display: flex;
+      gap: 2px;
+    }
+    .v3-bal-card {
+      flex: 1;
+      height: 100%;
+      background: rgba(255,255,255,0.04);
+      border-radius: 16px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Active fill — position/height set by JS per card direction */
+    .v3-card-fill {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      pointer-events: none;
+      z-index: 0;
+      background: #fff;
+    }
+
+    /* Top info header overlay */
+    .v3-card-header {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 95px;
+      background: linear-gradient(to bottom, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0) 100%);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 0;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .v3-card-label {
+      font-family: 'ABC Diatype Mono', monospace;
+      font-weight: 500;
+      font-size: 11px;
+      line-height: 1;
+      letter-spacing: 0.33px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.5);
+    }
+    .v3-card-amounts {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .v3-card-token {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 20px;
+      line-height: 1.2;
+      letter-spacing: -0.4px;
+      color: #fff;
+    }
+    .v3-card-usd {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      line-height: 1;
+      letter-spacing: 0.13px;
+      color: rgba(255,255,255,0.48);
+      text-align: center;
+    }
+
+    /* Vertical tick marks column — spans from 20px below header to card bottom */
+    .v3-ticks {
+      position: absolute;
+      top: 115px; /* HEADER_H(95) + 20px gap */
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .v3-tick {
+      width: 4px; height: 4px;
+      background: #d9d9d9;
+      border-radius: 3px;
+      flex-shrink: 0;
+      opacity: 0.2;
+    }
+
+    /* Draggable percentage pill */
+    .v3-pill {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 32px;
+      height: 20px;
+      background: white;
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      padding: 8px;
+      cursor: grab;
+      z-index: 3;
+    }
+    .v3-pill:active { cursor: grabbing; }
+    .v3-pill-label {
+      font-family: 'ABC Diatype Mono', monospace;
+      font-weight: 700;
+      font-size: 11px;
+      line-height: 1;
+      letter-spacing: 0.66px;
+      text-transform: uppercase;
+      color: #000;
+      pointer-events: none;
+    }
+    .v3-pill-line {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 20px;
+      height: 2px;
+      background: #090707;
+      border-radius: 24px;
+      z-index: 3;
+    }
+
+    /* V3 CTA */
+    .v3-cta {
+      position: absolute;
+      bottom: 20px;
+      left: 19.5px;
+      width: 320px;
+      height: 48px;
+      background: #fff;
+      border-radius: 999px;
+      border: none;
+      opacity: 0.4;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0 20px;
+    }
+    .v3-cta.is-active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .v3-cta__label {
+      font-family: 'ABC Diatype Mono', monospace;
+      font-weight: 700;
+      font-size: 15px;
+      line-height: 1;
+      letter-spacing: 0.45px;
+      text-transform: uppercase;
+      color: #090707;
+      white-space: nowrap;
+    }
+
+    /* V2 CTA */
+    .v2-cta {
+      position: absolute;
+      bottom: 19.5px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 320px;
+      height: 48px;
+      background: #fff;
+      border-radius: 999px;
+      border: none;
+      opacity: 0.5;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0 20px;
+      transition: opacity 0.18s ease;
+    }
+    .v2-cta.is-active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .v2-cta__label {
+      font-family: 'ABC Diatype Mono', monospace;
+      font-weight: 700;
+      font-size: 15px;
+      line-height: 1;
+      letter-spacing: 0.45px;
+      text-transform: uppercase;
+      color: #000;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="screen">
+
+    <!-- ══════════════════════════════════════════
+         V1 · Balance / Slider
+    ══════════════════════════════════════════ -->
+    <div class="card active" id="card-v1">
+
+      <div class="header">
+        <span class="header__title">Shield</span>
+        <div class="header__close">
+          <img src="http://localhost:3845/assets/b0328115606a9f057833a733c4cdf2cf6c80eb12.svg" width="16" height="16" alt="close" />
+        </div>
+      </div>
+
+      <!-- Gradient overlay + slider -->
+      <div class="v1-overlay">
+        <div class="v1-slider" id="v1Slider">
+          <div class="v1-slider__ticks">
+            <div class="tick"></div><div class="tick"></div><div class="tick"></div>
+            <div class="tick"></div><div class="tick"></div><div class="tick"></div>
+            <div class="tick"></div><div class="tick"></div><div class="tick"></div>
+          </div>
+          <!-- fill: clips gradient to active width -->
+          <div class="v1-slider__fill" id="v1SliderFill">
+            <img class="v1-slider__fill-bg" src="http://localhost:3845/assets/05533b62e7637737726ced2229e3a69e70f37e10.png" alt="" />
+          </div>
+          <!-- thumb pill: draggable, sits above fill -->
+          <div class="v1-slider__thumb" id="v1SliderThumb">
+            <span class="v1-slider__pill-label" id="v1SliderLabel">100%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Balance cards (above overlay via z-index) -->
+      <div class="v1-cards">
+        <div class="v1-bal-card">
+          <span class="v1-bal-card__label">Public</span>
+          <div class="v1-bal-card__amount">
+            <input type="text" inputmode="decimal" value="40,000" data-bal="pub" />
+            <span>ALEO</span>
+          </div>
+          <div class="v1-bal-card__usd">
+            <span class="v1-bal-card__usd-val" id="v1PubUsd">$3,200</span>
+            <img class="v1-bal-card__usd-icon" src="http://localhost:3845/assets/be8bc8ba730138c466feaec2a3baca93dc6cc4ed.svg" alt="" />
+          </div>
+        </div>
+        <div class="v1-cards-div">
+          <div class="v1-cards-div__inner">
+            <img src="http://localhost:3845/assets/d2ac3a89c1cf8ddfc1d7036b13701f2fc33e5e1d.svg" alt="" />
+          </div>
+        </div>
+        <div class="v1-bal-card">
+          <span class="v1-bal-card__label">Shielded</span>
+          <div class="v1-bal-card__amount">
+            <input type="text" inputmode="decimal" value="60,000" data-bal="shld" />
+            <span>ALEO</span>
+          </div>
+          <div class="v1-bal-card__usd">
+            <span class="v1-bal-card__usd-val" id="v1ShldUsd">$4,800</span>
+            <img class="v1-bal-card__usd-icon" src="http://localhost:3845/assets/be8bc8ba730138c466feaec2a3baca93dc6cc4ed.svg" alt="" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Token row -->
+      <div class="v1-token-row">
+        <div class="v1-token-row__left">
+          <div class="v1-token-icon">
+            <img src="http://localhost:3845/assets/d82dbf794df179b00acd07155a8cfe08ab8de403.svg" alt="Aleo" />
+          </div>
+          <div>
+            <div class="v1-token-name">ALEO</div>
+            <div class="v1-token-bal">100,000</div>
+          </div>
+        </div>
+        <div class="v1-token-updown">
+          <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 5L5 1L9 5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <button class="v1-cta">
+        <span class="v1-cta__label">Choose how much to shield</span>
+      </button>
+
+    </div><!-- /card-v1 -->
+
+
+    <!-- ══════════════════════════════════════════
+         V2 · Amount Input
+    ══════════════════════════════════════════ -->
+    <div class="card" id="card-v2">
+
+      <div class="header">
+        <span class="header__title">Shield</span>
+        <div class="header__close">
+          <img src="http://localhost:3845/assets/d61f231374c268baf1c0c9654343e9c130b027f6.svg" width="16" height="16" alt="close" />
+        </div>
+      </div>
+
+      <!-- Main overlay: amount + USD + presets + toggle -->
+      <div class="v2-overlay">
+        <div class="v2-amount">
+          <input class="v2-amount__input" id="v2Input" type="text" inputmode="decimal" value="0" />
+          <span class="v2-amount__ticker">ALEO</span>
+        </div>
+        <div class="v2-usd">
+          <span class="v2-usd__val">$0</span>
+          <img class="v2-usd__icon" src="http://localhost:3845/assets/be8bc8ba730138c466feaec2a3baca93dc6cc4ed.svg" alt="" />
+        </div>
+        <div class="v2-pct-row">
+          <button class="v2-pct-btn">25%</button>
+          <button class="v2-pct-btn">50%</button>
+          <button class="v2-pct-btn">75%</button>
+          <button class="v2-pct-btn">Max</button>
+        </div>
+        <div class="v2-toggle" role="tablist">
+          <div class="v2-toggle__pill" id="v2Pill"></div>
+          <button class="v2-toggle__btn v2-toggle__btn--active" role="tab" aria-selected="true">Shield</button>
+          <button class="v2-toggle__btn v2-toggle__btn--inactive" role="tab" aria-selected="false">Unshield</button>
+        </div>
+      </div>
+
+      <!-- Bottom info -->
+      <div class="v2-bottom-info">
+        <div class="v2-token-selector">
+          <div class="v2-token-row">
+            <div class="v2-token-row__left">
+              <div class="v2-token-icon">
+                <img src="http://localhost:3845/assets/cb9c587c6a58d3ea31dc0ea28677bfa8c9e1cbc7.svg" alt="Aleo" />
+              </div>
+              <span class="v2-token-name">ALEO</span>
+            </div>
+            <div class="v2-token-arrow-wrap">
+              <img class="v2-token-arrow-vector" src="http://localhost:3845/assets/e169592a1a6e239ffcf21fa12435c1823d07e993.svg" alt="" />
+            </div>
+          </div>
+          <div class="v2-amounts-bar">
+            <div class="v2-amounts-inner">
+              <div class="v2-amounts-div"></div>
+              <div class="v2-amounts-pub">
+                <div class="v2-amounts-label">Public</div>
+                <div class="v2-amounts-val" id="v2PubVal">40,000</div>
+              </div>
+              <div class="v2-amounts-shld">
+                <div class="v2-amounts-label">Shielded</div>
+                <div class="v2-amounts-val" id="v2ShldVal">60,000</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <button class="v2-cta">
+        <span class="v2-cta__label">Specify how much to shield</span>
+      </button>
+
+    </div><!-- /card-v2 -->
+
+    <!-- ══════════════════════════════════════════
+         V3 · Vertical Balance Sliders
+    ══════════════════════════════════════════ -->
+    <div class="card" id="card-v3">
+
+      <div class="header">
+        <span class="header__title">Shield</span>
+        <div class="header__close">
+          <img src="http://localhost:3845/assets/b0328115606a9f057833a733c4cdf2cf6c80eb12.svg" width="16" height="16" alt="close" />
+        </div>
+      </div>
+
+      <!-- Background gradient overlay -->
+      <div class="v3-overlay"></div>
+
+      <!-- Token row -->
+      <div class="v3-token-row">
+        <div class="v3-token-row__left">
+          <div class="v1-token-icon">
+            <img src="http://localhost:3845/assets/d82dbf794df179b00acd07155a8cfe08ab8de403.svg" alt="Aleo" />
+          </div>
+          <div>
+            <div class="v1-token-name">ALEO</div>
+            <div class="v1-token-bal">100,000</div>
+          </div>
+        </div>
+        <div class="v1-token-updown">
+          <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 5L5 1L9 5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <!-- Two vertical slider cards -->
+      <div class="v3-cards">
+
+        <!-- Public card -->
+        <div class="v3-bal-card" id="v3PubCard">
+          <div class="v3-card-fill" id="v3PubFill"></div>
+          <div class="v3-card-header">
+            <span class="v3-card-label">Public</span>
+            <div class="v3-card-amounts">
+              <span class="v3-card-token" id="v3PubToken">40,000</span>
+              <span class="v3-card-usd" id="v3PubUsd">$3,200</span>
+            </div>
+          </div>
+          <div class="v3-ticks">
+            <div class="v3-tick"></div><div class="v3-tick"></div><div class="v3-tick"></div>
+            <div class="v3-tick"></div><div class="v3-tick"></div><div class="v3-tick"></div>
+            <div class="v3-tick"></div><div class="v3-tick"></div><div class="v3-tick"></div>
+            <div class="v3-tick"></div>
+          </div>
+          <div class="v3-pill" id="v3PubPill">
+            <span class="v3-pill-label" id="v3PubPillLabel">36%</span>
+          </div>
+          <div class="v3-pill-line" id="v3PubPillLine"></div>
+        </div>
+
+        <!-- Shielded card -->
+        <div class="v3-bal-card" id="v3ShldCard">
+          <div class="v3-card-fill" id="v3ShldFill"></div>
+          <div class="v3-card-header">
+            <span class="v3-card-label">Shielded</span>
+            <div class="v3-card-amounts">
+              <span class="v3-card-token" id="v3ShldToken">60,000</span>
+              <span class="v3-card-usd" id="v3ShldUsd">$4,800</span>
+            </div>
+          </div>
+          <div class="v3-ticks">
+            <div class="v3-tick"></div><div class="v3-tick"></div><div class="v3-tick"></div>
+            <div class="v3-tick"></div><div class="v3-tick"></div><div class="v3-tick"></div>
+            <div class="v3-tick"></div><div class="v3-tick"></div><div class="v3-tick"></div>
+            <div class="v3-tick"></div>
+          </div>
+          <div class="v3-pill" id="v3ShldPill">
+            <span class="v3-pill-label" id="v3ShldPillLabel">64%</span>
+          </div>
+          <div class="v3-pill-line" id="v3ShldPillLine"></div>
+        </div>
+
+      </div>
+
+      <!-- CTA -->
+      <button class="v3-cta">
+        <span class="v3-cta__label">Specify amount</span>
+      </button>
+
+    </div><!-- /card-v3 -->
+
+  </div><!-- /screen -->
+
+  <!-- ══════════════════════════════════════════
+       VERSION SWITCHER
+  ══════════════════════════════════════════ -->
+  <div class="switcher">
+    <button class="switcher__btn active" data-target="card-v1">Balance</button>
+    <button class="switcher__btn" data-target="card-v2">Input</button>
+    <button class="switcher__btn" data-target="card-v3">Sliders</button>
+  </div>
+
+<script>
+  /* ── Mock data ── */
+  const TOTAL_ALEO = 100000;
+  const ALEO_PRICE = 0.08;
+
+  function fmtAleo(n) {
+    return Math.round(n).toLocaleString('en-US');
+  }
+  function fmtUsd(n) {
+    return '$' + Math.round(n).toLocaleString('en-US');
+  }
+
+  /* ── Version switcher ── */
+  const switcherBtns = document.querySelectorAll('.switcher__btn');
+  const cards = document.querySelectorAll('.card');
+  switcherBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.target;
+      cards.forEach(c => c.classList.remove('active'));
+      document.getElementById(target).classList.add('active');
+      switcherBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  /* ── V1: draggable slider + CTA ── */
+  (function () {
+    const TRACK_W   = 288;
+    const THUMB_W   = 40;
+    const THUMB_PAD = 4;
+    const V1_INIT_SHIELDED = 60000;
+
+    const slider   = document.getElementById('v1Slider');
+    const fill     = document.getElementById('v1SliderFill');
+    const thumb    = document.getElementById('v1SliderThumb');
+    const label    = document.getElementById('v1SliderLabel');
+    const v1Cta      = document.querySelector('.v1-cta');
+    const v1CtaLabel = document.querySelector('.v1-cta__label');
+    const pubInput   = document.querySelector('input[data-bal="pub"]');
+    const shldInput  = document.querySelector('input[data-bal="shld"]');
+
+    let pct = 100;
+
+    function updateCta() {
+      const currentShielded = Math.round(TOTAL_ALEO * pct / 100);
+      const delta = currentShielded - V1_INIT_SHIELDED;
+      if (delta !== 0) {
+        const verb = delta > 0 ? 'Shield' : 'Unshield';
+        v1CtaLabel.textContent = verb + ' ' + fmtAleo(Math.abs(delta)) + ' Aleo';
+        v1Cta.classList.add('is-active');
+      } else {
+        v1CtaLabel.textContent = 'Choose how much to shield';
+        v1Cta.classList.remove('is-active');
+      }
+    }
+
+    function applyValue(p) {
+      pct = Math.min(100, Math.max(0, p));
+      const fillW = Math.round((pct / 100) * TRACK_W);
+      const clampedFill = Math.max(THUMB_W + THUMB_PAD * 2, fillW);
+      fill.style.width  = clampedFill + 'px';
+      thumb.style.left  = (clampedFill - THUMB_W - THUMB_PAD) + 'px';
+      label.textContent = Math.round(pct) + '%';
+
+      const shieldedAmt = Math.round(TOTAL_ALEO * pct / 100);
+      const publicAmt   = TOTAL_ALEO - shieldedAmt;
+      pubInput.value  = fmtAleo(publicAmt);
+      shldInput.value = fmtAleo(shieldedAmt);
+      pubInput.style.width  = Math.max(1, pubInput.value.length)  + 'ch';
+      shldInput.style.width = Math.max(1, shldInput.value.length) + 'ch';
+      document.getElementById('v1PubUsd').textContent  = fmtUsd(publicAmt   * ALEO_PRICE);
+      document.getElementById('v1ShldUsd').textContent = fmtUsd(shieldedAmt * ALEO_PRICE);
+      updateCta();
+    }
+
+    function pctFromEvent(e) {
+      const rect = slider.getBoundingClientRect();
+      const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+      return (x / TRACK_W) * 100;
+    }
+
+    let dragging = false;
+    function onStart(e) { dragging = true; applyValue(pctFromEvent(e)); e.preventDefault(); }
+    function onMove(e)  { if (!dragging) return; applyValue(pctFromEvent(e)); e.preventDefault(); }
+    function onEnd()    { dragging = false; }
+
+    slider.addEventListener('mousedown',  onStart);
+    slider.addEventListener('touchstart', onStart, { passive: false });
+    document.addEventListener('mousemove',  onMove);
+    document.addEventListener('touchmove',  onMove, { passive: false });
+    document.addEventListener('mouseup',  onEnd);
+    document.addEventListener('touchend', onEnd);
+
+    // Balance inputs: manual edits also update CTA
+    [pubInput, shldInput].forEach(inp => {
+      function resize() { inp.style.width = Math.max(1, inp.value.length) + 'ch'; }
+      inp.addEventListener('input', () => { resize(); updateCta(); });
+      resize();
+    });
+
+    applyValue(60);
+  })();
+
+  /* ── V2: amount input ── */
+  const v2Input = document.getElementById('v2Input');
+
+  function v2Format(raw) {
+    const parts = raw.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return parts.join('.');
+  }
+
+  function v2Resize() {
+    v2Input.style.width = Math.max(1, v2Input.value.length) + 'ch';
+  }
+
+  v2Input.addEventListener('keydown', (e) => {
+    if (v2Input.value === '0' && e.key >= '1' && e.key <= '9') {
+      v2Input.value = '';
+    }
+  });
+
+  const v2UsdVal = document.querySelector('.v2-usd__val');
+
+  function v2UpdateUsd() {
+    const raw = parseFloat(v2Input.value.replace(/,/g, '')) || 0;
+    v2UsdVal.textContent = fmtUsd(raw * ALEO_PRICE);
+  }
+
+  v2Input.addEventListener('input', () => {
+    const selStart = v2Input.selectionStart;
+    const prev = v2Input.value;
+    const raw = prev.replace(/,/g, '');
+    const cleaned = raw.replace(/[^\d.]/g, '').replace(/(\..*?)\./g, '$1');
+    const formatted = cleaned === '' ? '0' : v2Format(cleaned);
+    if (formatted !== prev) {
+      const commasBefore = (prev.slice(0, selStart).match(/,/g) || []).length;
+      const commasAfter  = (formatted.slice(0, selStart).match(/,/g) || []).length;
+      v2Input.value = formatted;
+      const newPos = selStart + (commasAfter - commasBefore);
+      v2Input.setSelectionRange(newPos, newPos);
+    }
+    v2Resize();
+    v2UpdateUsd();
+  });
+
+  v2Resize();
+
+  /* ── V2: % preset buttons ── */
+  document.querySelectorAll('.v2-pct-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const activeBtn = document.querySelector('.v2-toggle__btn--active');
+      const mode = activeBtn ? activeBtn.textContent.trim() : 'Shield';
+      const avail = mode === 'Shield' ? 40000 : 60000; // public for shield, shielded for unshield
+      const label = btn.textContent.trim();
+      const multipliers = { '25%': 0.25, '50%': 0.5, '75%': 0.75, 'Max': 1 };
+      const amt = Math.round(avail * (multipliers[label] || 1));
+      v2Input.value = fmtAleo(amt);
+      v2Resize();
+      v2UpdateUsd();
+      updateV2Cta();
+    });
+  });
+
+  /* ── V2: CTA label + active state ── */
+  const v2Cta      = document.querySelector('.v2-cta');
+  const v2CtaLabel = document.querySelector('.v2-cta__label');
+
+  function updateV2Cta() {
+    const raw = parseFloat(v2Input.value.replace(/,/g, '')) || 0;
+    const activeBtn = document.querySelector('.v2-toggle__btn--active');
+    const mode = activeBtn ? activeBtn.textContent.trim() : 'Shield';
+    if (raw > 0) {
+      v2CtaLabel.textContent = mode + ' ' + v2Input.value + ' Aleo';
+      v2Cta.classList.add('is-active');
+    } else {
+      v2CtaLabel.textContent = 'Specify how much to ' + mode.toLowerCase();
+      v2Cta.classList.remove('is-active');
+    }
+  }
+
+  v2Input.addEventListener('input', updateV2Cta);
+  updateV2Cta();
+
+  /* ── V3: vertical sliders (linked: pub + shld = 100%) ── */
+  (function () {
+    const HEADER_H = 95;
+    const PILL_H   = 20;
+
+    function makeSlider(cardId, pillId, fillId, labelId, lineId) {
+      const card  = document.getElementById(cardId);
+      const pill  = document.getElementById(pillId);
+      const fill  = document.getElementById(fillId);
+      const label = document.getElementById(labelId);
+      const line  = document.getElementById(lineId);
+
+      function metrics() {
+        const cardH    = card.offsetHeight;
+        const fillMaxH = cardH - HEADER_H;
+        return { cardH, fillMaxH };
+      }
+
+      function render(pct) {
+        pct = Math.min(100, Math.max(0, pct));
+        const { cardH, fillMaxH } = metrics();
+        const fillH   = pct / 100 * fillMaxH;
+        fill.style.bottom = '0';
+        fill.style.top    = 'auto';
+        fill.style.height = fillH + 'px';
+        // pill 8px above the fill edge
+        const pillTop = cardH - fillH - PILL_H - 8;
+        pill.style.top = pillTop + 'px';
+        line.style.top = (cardH - fillH + 8) + 'px';
+        label.textContent = Math.round(pct) + '%';
+      }
+
+      function pctFromEvent(e) {
+        const { cardH, fillMaxH } = metrics();
+        const rect = card.getBoundingClientRect();
+        const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+        return (cardH - y) / fillMaxH * 100;
+      }
+
+      return { card, pill, render, pctFromEvent };
+    }
+
+    const pub  = makeSlider('v3PubCard',  'v3PubPill',  'v3PubFill',  'v3PubPillLabel',  'v3PubPillLine');
+    const shld = makeSlider('v3ShldCard', 'v3ShldPill', 'v3ShldFill', 'v3ShldPillLabel', 'v3ShldPillLine');
+
+    const v3PubToken  = document.getElementById('v3PubToken');
+    const v3PubUsd    = document.getElementById('v3PubUsd');
+    const v3ShldToken = document.getElementById('v3ShldToken');
+    const v3ShldUsd   = document.getElementById('v3ShldUsd');
+    const v3Cta       = document.querySelector('.v3-cta');
+    const v3CtaLabel  = document.querySelector('.v3-cta__label');
+    const V3_INIT_SHIELDED = 60000;
+
+    let pubPct = 40;
+    function applyPub(p) {
+      pubPct = Math.min(100, Math.max(0, p));
+      pub.render(pubPct);
+      shld.render(100 - pubPct);
+      const pubAmt  = TOTAL_ALEO * pubPct / 100;
+      const shldAmt = TOTAL_ALEO - pubAmt;
+      v3PubToken.textContent  = fmtAleo(pubAmt);
+      v3PubUsd.textContent    = fmtUsd(pubAmt  * ALEO_PRICE);
+      v3ShldToken.textContent = fmtAleo(shldAmt);
+      v3ShldUsd.textContent   = fmtUsd(shldAmt * ALEO_PRICE);
+
+      const delta = Math.round(shldAmt) - V3_INIT_SHIELDED;
+      if (delta !== 0) {
+        const verb = delta > 0 ? 'Shield' : 'Unshield';
+        v3CtaLabel.textContent = verb + ' ' + fmtAleo(Math.abs(delta)) + ' Aleo';
+        v3Cta.classList.add('is-active');
+      } else {
+        v3CtaLabel.textContent = 'Specify amount';
+        v3Cta.classList.remove('is-active');
+      }
+    }
+    function applyShld(p) {
+      const shldPct = Math.min(100, Math.max(0, p));
+      pubPct = 100 - shldPct;
+      applyPub(pubPct);
+    }
+
+    let dragging = null; // 'pub' | 'shld' | null
+    pub.pill.addEventListener('mousedown',  e => { dragging = 'pub';  applyPub(pub.pctFromEvent(e));  e.preventDefault(); });
+    pub.pill.addEventListener('touchstart', e => { dragging = 'pub';  applyPub(pub.pctFromEvent(e));  e.preventDefault(); }, { passive: false });
+    shld.pill.addEventListener('mousedown',  e => { dragging = 'shld'; applyShld(shld.pctFromEvent(e)); e.preventDefault(); });
+    shld.pill.addEventListener('touchstart', e => { dragging = 'shld'; applyShld(shld.pctFromEvent(e)); e.preventDefault(); }, { passive: false });
+
+    document.addEventListener('mousemove', e => {
+      if (dragging === 'pub')  applyPub(pub.pctFromEvent(e));
+      if (dragging === 'shld') applyShld(shld.pctFromEvent(e));
+    });
+    document.addEventListener('touchmove', e => {
+      if (dragging === 'pub')  { applyPub(pub.pctFromEvent(e));  e.preventDefault(); }
+      if (dragging === 'shld') { applyShld(shld.pctFromEvent(e)); e.preventDefault(); }
+    }, { passive: false });
+    document.addEventListener('mouseup',  () => { dragging = null; });
+    document.addEventListener('touchend', () => { dragging = null; });
+
+    applyPub(40); // initialise: pub=40%, shld=60%
+
+    // Re-render whenever the card becomes visible (offsetHeight is 0 while display:none)
+    new ResizeObserver(() => applyPub(pubPct)).observe(pub.card);
+  })();
+
+  /* ── V2: segmented control ── */
+  const v2Btns = document.querySelectorAll('.v2-toggle__btn');
+  const v2Pill = document.getElementById('v2Pill');
+  v2Btns.forEach((btn, i) => {
+    btn.addEventListener('click', () => {
+      v2Btns.forEach(b => {
+        b.classList.remove('v2-toggle__btn--active');
+        b.classList.add('v2-toggle__btn--inactive');
+        b.setAttribute('aria-selected', 'false');
+      });
+      btn.classList.remove('v2-toggle__btn--inactive');
+      btn.classList.add('v2-toggle__btn--active');
+      btn.setAttribute('aria-selected', 'true');
+      v2Pill.classList.toggle('v2-toggle__pill--right', i === 1);
+      updateV2Cta();
+    });
+  });
+</script>
+</body>
+</html>
