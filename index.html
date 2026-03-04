@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Shield</title>
+  <link rel="preload" href="bg.riv" as="fetch" crossorigin="anonymous" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -54,7 +55,23 @@
       position: relative;
       width: 360px;
       height: 640px;
+      overflow: hidden;
+      border-radius: 16px;
+      background: #090707;
     }
+
+    /* Page-level navigation */
+    .page {
+      position: absolute;
+      inset: 0;
+      display: none;
+      transform: translateX(100%);
+      opacity: 0;
+      transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                  opacity 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .page.is-visible { display: block; }
+    .page.is-current { transform: translateX(0); opacity: 1; }
 
     /* hide inactive card */
     .card { display: none; }
@@ -135,6 +152,10 @@
       flex-shrink: 0;
       cursor: pointer;
       user-select: none;
+      transition: background 0.2s ease;
+    }
+    .v1-slider:hover {
+      background: rgba(255,255,255,0.14);
     }
     .v1-slider__ticks {
       position: absolute;
@@ -147,7 +168,8 @@
       justify-content: space-between;
       opacity: 0.2;
       pointer-events: none;
-      z-index: 0;
+      z-index: 2; /* on top of fill, below pill */
+      mix-blend-mode: difference;
     }
     .tick {
       width: 3px; height: 3px;
@@ -155,7 +177,7 @@
       border-radius: 3px;
       flex-shrink: 0;
     }
-    /* Coloured fill — clips the gradient image to the active width */
+    /* Coloured fill — clips the gradient image to the active width; white at 0%, image at 100% */
     .v1-slider__fill {
       position: absolute;
       left: 0; top: 0;
@@ -166,36 +188,73 @@
       pointer-events: none;
       box-shadow: inset 0 2px 28px rgba(255,255,255,0.45);
       z-index: 1;
+      background: #fff; /* white at 0%; image opacity blends on top */
     }
+    .v1-slider--ready .v1-slider__fill { transition: width 0.38s cubic-bezier(0.33, 1, 0.68, 1); }
     .v1-slider__fill-bg {
-      /* always 288px wide so gradient doesn't stretch as fill changes */
+      /* Rive canvas on top; no gradient by default to avoid flash before Rive loads */
+      position: absolute;
+      left: 0; top: 0;
+      width: 288px;
+      height: 100%;
+      background: transparent;
+    }
+    .v1-slider__fill-bg.has-fallback {
+      background: linear-gradient(90deg, #7c3aed 0%, #db2777 50%, #f97316 100%);
+    }
+    .v1-slider--ready .v1-slider__fill-bg { transition: opacity 0.38s cubic-bezier(0.33, 1, 0.68, 1); }
+    .v1-slider__fill-bg-img {
+      display: none; /* Rive fills width; keep in DOM as fallback only */
       position: absolute;
       left: 0; top: 0;
       width: 288px;
       height: 100%;
       object-fit: cover;
-      background: linear-gradient(90deg, #7c3aed 0%, #db2777 50%, #f97316 100%);
+      z-index: 0;
     }
-    /* Draggable thumb pill */
+    .v1-slider__fill-bg canvas {
+      position: absolute;
+      left: 0; top: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 1;
+    }
+    /* Draggable thumb pill — styled from Figma: black bg, blur, inset glow */
     .v1-slider__thumb {
       position: absolute;
       top: 4px;
       /* left set via JS */
       width: 40px;
       height: 32px;
-      background: white;
+      transition: transform 0.2s ease;
+      background: #000;
       backdrop-filter: blur(14px);
       -webkit-backdrop-filter: blur(14px);
-      border: 1px solid rgba(255,255,255,0.04);
       border-radius: 24px;
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 2;
+      overflow: clip;
+      padding: 8px;
+      z-index: 3; /* on top of ticks */
       box-shadow: inset 0 0 6px rgba(255,255,255,0.32);
       cursor: grab;
     }
+    .v1-slider--ready .v1-slider__thumb {
+      transition: left 0.38s cubic-bezier(0.33, 1, 0.68, 1), transform 0.2s ease;
+    }
+    .v1-slider:hover .v1-slider__thumb {
+      transform: scale(1.08);
+    }
+    .v1-slider:hover .v1-slider__thumb .v1-slider__pill-label {
+      transform: scale(0.9259); /* 1/1.08 — keeps text same visual size */
+    }
     .v1-slider__thumb:active { cursor: grabbing; }
+    /* No transition during drag — only animate on click */
+    .v1-slider.is-dragging .v1-slider__fill,
+    .v1-slider.is-dragging .v1-slider__fill-bg,
+    .v1-slider.is-dragging .v1-slider__thumb { transition: none; }
     .v1-slider__pill-label {
       font-family: 'ABC Diatype Mono', monospace;
       font-weight: 700;
@@ -203,8 +262,9 @@
       line-height: 1;
       letter-spacing: 0.66px;
       text-transform: uppercase;
-      color: #090707;
+      color: #fff;
       pointer-events: none;
+      transition: transform 0.2s ease;
     }
 
     /* Balance cards row */
@@ -228,6 +288,14 @@
       justify-content: space-between;
       padding: 20px 0;
       flex-shrink: 0;
+      transition: background 0.2s ease;
+      cursor: text;
+    }
+    .v1-bal-card:hover {
+      background: rgba(255,255,255,0.06);
+    }
+    .v1-bal-card:focus-within {
+      background: rgba(255,255,255,0.08);
     }
     .v1-bal-card__label {
       font-family: 'ABC Diatype Mono', monospace;
@@ -244,24 +312,50 @@
       flex-direction: column;
       align-items: center;
       gap: 0;
+      position: relative;
+    }
+    .v1-bal-card number-flow {
+      display: block;
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 20px;
+      line-height: 1;
+      letter-spacing: -0.4px;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+      --number-flow-mask-height: 0.25em;
+      --number-flow-mask-width: 0.5em;
+      padding-block: 0.25em;
+    }
+    .v1-drag-num {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 20px;
+      line-height: 1.5;
+      letter-spacing: -0.4px;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+      padding: 0.25em 0;
+      display: block;
+      text-align: center;
     }
     .v1-bal-card__amount input {
       font-family: 'Innovator Grotesk', sans-serif;
       font-weight: 600;
       font-size: 20px;
-      line-height: 1.2;
+      line-height: 1.5;
       letter-spacing: -0.4px;
       color: #fff;
       background: transparent;
       border: none;
       outline: none;
       text-align: center;
-      width: 4ch;
-      padding: 0;
+      padding: 0.25em 0;
       caret-color: #fff;
       min-width: 1ch;
+      font-variant-numeric: tabular-nums;
     }
-    .v1-bal-card__amount span {
+    .v1-bal-card__amount > span:last-of-type {
       display: block;
       font-family: 'Innovator Grotesk', sans-serif;
       font-weight: 600;
@@ -273,18 +367,21 @@
     }
     .v1-bal-card__usd {
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 8px;
+      gap: 0;
+      cursor: pointer;
     }
+    .v1-bal-card:hover .v1-bal-card__usd-val { color: rgba(255,255,255,0.8); }
     .v1-bal-card__usd-val {
       font-family: 'Innovator Grotesk', sans-serif;
       font-weight: 600;
       font-size: 13px;
-      line-height: 1;
       letter-spacing: 0.13px;
       color: rgba(255,255,255,0.48);
+      transition: color 0.2s ease;
+      text-align: center;
     }
-    .v1-bal-card__usd-icon { width: 13px; height: 11px; }
     /* Divider between cards */
     .v1-cards-div {
       width: 8px;
@@ -307,21 +404,34 @@
       display: block;
       width: 100%;
       height: 100%;
+      transition: opacity 0.2s ease;
+      opacity: 0;
     }
+    .v1-cards-div__inner .divider-inactive { opacity: 1; }
+    .v1-cards:has(.v1-bal-card:nth-child(1):hover) .v1-cards-div__inner .divider-inactive { opacity: 0.5; }
+    .v1-cards:has(.v1-bal-card:nth-child(1):hover) .v1-cards-div__inner .divider-left { opacity: 0.5; }
+    .v1-cards:has(.v1-bal-card:nth-child(3):hover) .v1-cards-div__inner .divider-inactive { opacity: 0.5; }
+    .v1-cards:has(.v1-bal-card:nth-child(3):hover) .v1-cards-div__inner .divider-right { opacity: 0.5; }
+    .v1-cards:has(.v1-bal-card:nth-child(1):focus-within) .v1-cards-div__inner .divider-inactive { opacity: 0; }
+    .v1-cards:has(.v1-bal-card:nth-child(1):focus-within) .v1-cards-div__inner .divider-left { opacity: 1; }
+    .v1-cards:has(.v1-bal-card:nth-child(1):focus-within) .v1-cards-div__inner .divider-right { opacity: 0; }
+    .v1-cards:has(.v1-bal-card:nth-child(3):focus-within) .v1-cards-div__inner .divider-inactive { opacity: 0; }
+    .v1-cards:has(.v1-bal-card:nth-child(3):focus-within) .v1-cards-div__inner .divider-right { opacity: 1; }
+    .v1-cards:has(.v1-bal-card:nth-child(3):focus-within) .v1-cards-div__inner .divider-left { opacity: 0; }
 
     /* Token row */
     .v1-token-row {
       position: absolute;
       top: 467.5px;
-      left: 19.5px;
-      width: 320px;
+      left: 16px;
+      width: 328px;
       height: fit-content;
       background: rgba(255,255,255,0.08);
-      border-radius: 16px;
+      border-radius: 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px 16px 12px 8px;
+      padding: 16px 24px 16px 16px;
     }
     .v1-token-row__left { display: flex; align-items: center; gap: 12px; }
     .v1-token-icon {
@@ -369,8 +479,8 @@
     .v1-cta {
       position: absolute;
       top: 570px;
-      left: 19.5px;
-      width: 320px;
+      left: 72px;
+      width: 264px;
       height: 48px;
       background: #fff;
       border-radius: 999px;
@@ -662,7 +772,7 @@
       position: relative;
     }
 
-    /* Active fill — position/height set by JS per card direction */
+    /* Active fill — position/height set by JS; white at 0%, image at 100% (no transition) */
     .v3-card-fill {
       position: absolute;
       left: 0;
@@ -670,6 +780,36 @@
       pointer-events: none;
       z-index: 0;
       background: #fff;
+      overflow: hidden;
+      border-radius: 20px;
+      box-shadow: inset 0px 12px 52px 0px rgba(255, 255, 255, 0.651);
+    }
+    .v3-card-fill-bg {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .v3-card-fill-bg-img {
+      display: none; /* Rive fills; keep as fallback only */
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: bottom;
+      z-index: 0;
+    }
+    .v3-card-fill-bg canvas {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 1;
     }
 
     /* Top info header overlay */
@@ -684,7 +824,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: space-between;
-      padding: 16px 0;
+      padding: 16px 0 12px;
       z-index: 2;
       pointer-events: none;
     }
@@ -707,25 +847,28 @@
       font-family: 'Innovator Grotesk', sans-serif;
       font-weight: 600;
       font-size: 20px;
-      line-height: 1.2;
+      line-height: 1.5;
       letter-spacing: -0.4px;
       color: #fff;
+      padding: 0.25em 0;
+      display: block;
+      font-variant-numeric: tabular-nums;
     }
     .v3-card-usd {
       font-family: 'Innovator Grotesk', sans-serif;
       font-weight: 600;
       font-size: 13px;
-      line-height: 1;
       letter-spacing: 0.13px;
       color: rgba(255,255,255,0.48);
       text-align: center;
+      margin-top: -8px;
     }
 
     /* Vertical tick marks column — spans from 20px below header to card bottom */
     .v3-ticks {
       position: absolute;
-      top: 115px; /* HEADER_H(95) + 20px gap */
-      bottom: 24px;
+      top: 127px; /* HEADER_H(95) + top-offset(16) + padding(16) */
+      bottom: 16px;
       left: 50%;
       transform: translateX(-50%);
       width: 4px;
@@ -749,7 +892,7 @@
       position: absolute;
       left: 50%;
       transform: translateX(-50%);
-      width: 32px;
+      width: 40px;
       height: 20px;
       background: white;
       border-radius: 24px;
@@ -759,9 +902,26 @@
       overflow: hidden;
       padding: 8px;
       cursor: grab;
-      z-index: 3;
+      z-index: 5; /* above pill-line handle zone (z-index 3) */
     }
     .v3-pill:active { cursor: grabbing; }
+    /* Always-on smooth transitions — disabled during drag */
+    .v3-pill, .v3-pill-line {
+      transition: top 0.38s cubic-bezier(0.33, 1, 0.68, 1);
+    }
+    .v3-card-fill {
+      transition: height 0.38s cubic-bezier(0.33, 1, 0.68, 1);
+    }
+    /* Disable transitions while dragging for instant tracking */
+    .v3-cards--dragging .v3-pill,
+    .v3-cards--dragging .v3-pill-line,
+    .v3-cards--dragging .v3-card-fill {
+      transition: none;
+    }
+    /* Smooth offset jump when pill crosses the header boundary (non-drag only) */
+    .v3-pill--offset-anim {
+      transition: top 0.1s cubic-bezier(0.33, 1, 0.68, 1) !important;
+    }
     .v3-pill-label {
       font-family: 'ABC Diatype Mono', monospace;
       font-weight: 700;
@@ -776,19 +936,29 @@
       position: absolute;
       left: 50%;
       transform: translateX(-50%);
-      width: 20px;
-      height: 2px;
-      background: #090707;
-      border-radius: 24px;
+      width: 100%;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       z-index: 3;
+      cursor: grab;
     }
+    .v3-pill-line:active { cursor: grabbing; }
+    .v3-pill-line img {
+      pointer-events: none;
+      opacity: 0.48;
+      transition: opacity 0.15s;
+    }
+    .v3-pill-line:hover img,
+    .v3-cards--dragging .v3-pill-line img { opacity: 1; }
 
     /* V3 CTA */
     .v3-cta {
       position: absolute;
       bottom: 20px;
-      left: 19.5px;
-      width: 320px;
+      left: 72px;
+      width: 264px;
       height: 48px;
       background: #fff;
       border-radius: 999px;
@@ -851,11 +1021,781 @@
       color: #000;
       white-space: nowrap;
     }
+
+    /* ─────────────────────────────────────────────────────
+       TOKEN ROW — clickable
+    ───────────────────────────────────────────────────── */
+    .v1-token-row { cursor: pointer; transition: background 0.18s ease; }
+    .v1-token-row:hover { background: rgba(255,255,255,0.12); }
+    .v3-token-row { cursor: pointer; }
+
+    /* ─────────────────────────────────────────────────────
+       REFRESH BUTTON
+    ───────────────────────────────────────────────────── */
+    .v1-refresh, .v3-refresh {
+      position: absolute;
+      width: 48px;
+      height: 48px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.18s ease;
+    }
+    .v1-refresh { top: 570px; left: 16px; }
+    .v3-refresh { bottom: 20px; left: 16px; }
+    .v1-refresh:hover, .v3-refresh:hover { background: rgba(255,255,255,0.14); }
+    .v1-refresh:active, .v3-refresh:active { background: rgba(255,255,255,0.22); }
+
+    /* ─────────────────────────────────────────────────────
+       V3 CARD AMOUNTS — interactive
+    ───────────────────────────────────────────────────── */
+    .v3-card-amounts { pointer-events: auto; cursor: pointer; }
+    .v3-card-usd { cursor: pointer; }
+
+    /* V3 card input */
+    .v3-card-input {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 20px;
+      line-height: 1.5;
+      letter-spacing: -0.4px;
+      color: #fff;
+      background: transparent;
+      border: none;
+      outline: none;
+      text-align: center;
+      caret-color: #fff;
+      width: 100%;
+      padding: 0.25em 0;
+      font-variant-numeric: tabular-nums;
+    }
+    /* V3 card number-flow */
+    .v3-card-nf {
+      display: block;
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 20px;
+      line-height: 1;
+      letter-spacing: -0.4px;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+      --number-flow-mask-height: 0.25em;
+      --number-flow-mask-width: 0.5em;
+      text-align: center;
+      padding-block: 0.25em;
+    }
+
+    /* ─────────────────────────────────────────────────────
+       TOKEN SELECTION OVERLAY
+    ───────────────────────────────────────────────────── */
+    .token-overlay {
+      position: absolute;
+      inset: 0;
+      background: #090707;
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+      border-radius: inherit;
+    }
+    .token-overlay.is-open { transform: translateX(0); }
+
+    .token-overlay__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px;
+      height: 66px;
+      flex-shrink: 0;
+    }
+    .token-overlay__back {
+      width: 20px; height: 20px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      flex-shrink: 0;
+    }
+    .token-overlay__title {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      line-height: 1.35;
+      color: #fff;
+    }
+    .token-overlay__spacer { width: 20px; height: 20px; flex-shrink: 0; }
+
+    .token-overlay__search {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      flex-shrink: 0;
+    }
+    .token-overlay__placeholder {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 500;
+      font-size: 15px;
+      color: rgba(255,255,255,0.48);
+    }
+    .token-overlay__list { flex: 1; overflow-y: auto; }
+    .token-overlay__item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 20px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .token-overlay__item:hover { background: rgba(255,255,255,0.04); }
+    .token-overlay__item--selected { background: rgba(255,255,255,0.06); }
+    .token-overlay__icon {
+      width: 40px; height: 40px;
+      background: #090707;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .token-overlay__icon img {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 32px; height: 32.008px;
+    }
+    .token-overlay__info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .token-overlay__name {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      letter-spacing: 0.3px;
+      color: #fff;
+      text-transform: uppercase;
+    }
+    .token-overlay__bal {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 500;
+      font-size: 13px;
+      letter-spacing: 0.13px;
+      color: rgba(255,255,255,0.48);
+    }
+    .token-overlay__usd-val {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      line-height: 1.35;
+      color: #fff;
+      white-space: nowrap;
+    }
+    /* ─────────────────────────────────────────────────────
+       HOME PAGE
+    ───────────────────────────────────────────────────── */
+    .home {
+      background: #090707;
+      width: 360px;
+      height: 640px;
+      overflow: hidden;
+      position: relative;
+    }
+    .home-scroll {
+      position: absolute;
+      left: 4px;
+      top: 16px;
+      width: 352px;
+      bottom: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      align-items: center;
+      padding-bottom: 80px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .home-scroll::-webkit-scrollbar { display: none; }
+    .home-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 320px;
+    }
+    .home-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      border: 0.5px solid rgba(255,255,255,0.1);
+      background: linear-gradient(225deg, #00d4ff 0%, #090979 100%);
+    }
+    .home-topbar-actions {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+    .home-icon-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 24px;
+      background: rgba(255,255,255,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+    }
+    .home-balance-card {
+      width: 100%;
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.08) 100%);
+      padding: 19px 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      height: 168px;
+    }
+    .home-balance-label {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      line-height: 1.35;
+      color: white;
+      opacity: 0.48;
+    }
+    .home-balance-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .home-balance-amount {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 500;
+      font-size: 40px;
+      line-height: 1;
+      color: white;
+      letter-spacing: -0.8px;
+    }
+    .home-balance-amount .cents {
+      color: rgba(255,255,255,0.32);
+    }
+    .home-balance-chevron {
+      width: 24px;
+      height: 24px;
+      border-radius: 24px;
+      background: rgba(255,255,255,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform: scaleY(-1);
+    }
+    .home-balance-chevron img { opacity: 0.48; }
+
+    .home-actions {
+      display: flex;
+      gap: 20px;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+    }
+    .home-action {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      border: none;
+      background: none;
+      padding: 0;
+    }
+    .home-action-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .home-action-label {
+      font-family: 'ABC Diatype Mono', monospace;
+      font-weight: 700;
+      font-size: 11px;
+      line-height: 1;
+      letter-spacing: 0.66px;
+      text-transform: uppercase;
+      color: white;
+      text-align: center;
+    }
+
+    .home-tokens {
+      width: 100%;
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 100%);
+      padding: 16px 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .home-tabs {
+      display: flex;
+      background: rgba(255,255,255,0.04);
+      border-radius: 999px;
+    }
+    .home-tab {
+      flex: 1;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-family: 'ABC Diatype Mono', monospace;
+      font-weight: 700;
+      font-size: 13px;
+      line-height: 1;
+      letter-spacing: 0.39px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.5);
+      text-align: center;
+      border: none;
+      background: none;
+      cursor: pointer;
+    }
+    .home-tab.active {
+      background: rgba(255,255,255,0.2);
+      color: white;
+    }
+    .home-token-list {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .home-token-row {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      cursor: pointer;
+    }
+    .home-token-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: #090707;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .home-token-icon img {
+      width: 32px;
+      height: 32px;
+    }
+    .home-token-info {
+      flex: 1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .home-token-left {
+      display: flex;
+      flex-direction: column;
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .home-token-name {
+      font-size: 15px;
+      line-height: 1.35;
+      color: white;
+      letter-spacing: 0.15px;
+    }
+    .home-token-bal {
+      font-size: 13px;
+      line-height: 1.4;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 0.13px;
+    }
+    .home-token-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+    .home-token-usd {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      line-height: 1.35;
+      color: white;
+      letter-spacing: 0.15px;
+      text-transform: uppercase;
+    }
+
+    .home-bottom-nav {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 360px;
+      background: rgba(11,6,5,0.8);
+      backdrop-filter: blur(12px);
+      border-top: 1px solid rgba(255,255,255,0.04);
+      box-shadow: 0px -4px 40px 0px rgba(11,6,5,0.8);
+      padding: 8px 0 16px;
+    }
+    .home-nav-row {
+      display: flex;
+      align-items: center;
+      height: 40px;
+      padding: 0 20px;
+    }
+    .home-nav-item {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      border: none;
+      background: none;
+      cursor: pointer;
+      padding: 8px;
+      border-radius: 16px;
+    }
+
+    /* ─────────────────────────────────────────────────────
+       CONFIRM PAGE (Shielding / Unshielding)
+    ───────────────────────────────────────────────────── */
+    .confirm {
+      background: #090707;
+      width: 360px;
+      height: 640px;
+      overflow: hidden;
+      position: relative;
+    }
+    .confirm-handle {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 360px;
+      height: 66px;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+    }
+    .confirm-back {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+      border: none;
+      background: none;
+      padding: 0;
+    }
+    .confirm-title {
+      position: absolute;
+      top: 74px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 32px;
+      line-height: 1;
+      text-align: center;
+      color: white;
+      letter-spacing: -1.28px;
+      white-space: nowrap;
+    }
+    .confirm-from {
+      position: absolute;
+      top: 122px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .confirm-from-text {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 500;
+      font-size: 15px;
+      line-height: 1;
+      color: white;
+      opacity: 0.5;
+    }
+    .confirm-from-dot {
+      width: 20px;
+      height: 20px;
+      border-radius: 999px;
+      background: linear-gradient(225deg, #fd2d72 0%, #226ac3 100%);
+    }
+    .confirm-card {
+      position: absolute;
+      top: 158px;
+      left: 16px;
+      width: 328px;
+      height: 142px;
+      border-radius: 24px;
+      background: linear-gradient(0deg, rgba(255,255,255,0.08) 27%, rgba(255,255,255,0) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .confirm-card-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+    .confirm-token-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: #090707;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .confirm-token-icon img { width: 32px; height: 32px; }
+    .confirm-amounts {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .confirm-amount {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 17px;
+      line-height: 1;
+      color: white;
+    }
+    .confirm-usd {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 500;
+      font-size: 13px;
+      line-height: 1;
+      color: white;
+      opacity: 0.48;
+    }
+    .confirm-direction {
+      position: absolute;
+      top: 300px;
+      left: 16px;
+      width: 328px;
+      height: 97px;
+    }
+    .confirm-direction-bg {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 328px;
+      height: 81px;
+      border-radius: 24px;
+      background: rgba(255,255,255,0.08);
+    }
+    .confirm-direction-bridge {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 62px;
+      height: 16px;
+    }
+    .confirm-direction-row {
+      position: absolute;
+      bottom: 20px;
+      left: 0;
+      width: 328px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .confirm-dir-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .confirm-dir-label {
+      font-family: 'ABC Diatype Mono', monospace;
+      font-weight: 700;
+      font-size: 13px;
+      line-height: 1;
+      letter-spacing: 0.39px;
+      text-transform: uppercase;
+      color: white;
+    }
+    .confirm-dir-arrow {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .confirm-fee {
+      position: absolute;
+      top: 530px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'ABC Diatype Mono', monospace;
+      font-weight: 500;
+      font-size: 15px;
+      line-height: 1;
+      letter-spacing: 0.45px;
+      text-transform: uppercase;
+      color: white;
+      opacity: 0.48;
+      white-space: nowrap;
+    }
+    .confirm-send-btn {
+      position: absolute;
+      top: 572px;
+      left: 20px;
+      width: 320px;
+      height: 48px;
+      border-radius: 999px;
+      background: white;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .confirm-send-btn span {
+      font-family: 'ABC Diatype Mono', monospace;
+      font-weight: 700;
+      font-size: 15px;
+      line-height: 1;
+      letter-spacing: 0.45px;
+      text-transform: uppercase;
+      color: black;
+    }
+
   </style>
 </head>
 <body>
 
   <div class="screen">
+
+    <!-- ══════════════════════════════════════════
+         HOME PAGE
+    ══════════════════════════════════════════ -->
+    <div class="page active" id="page-home">
+      <div class="home">
+        <div class="home-scroll">
+          <div class="home-topbar">
+            <div class="home-avatar" style="background-image:url('assets/home-avatar.png');background-size:cover;background-position:center;"></div>
+            <div class="home-topbar-actions">
+              <button class="home-icon-btn">
+                <img src="assets/icon-private.svg" width="20" height="20" alt="" />
+              </button>
+              <button class="home-icon-btn">
+                <img src="assets/icon-refresh-top.svg" width="20" height="20" alt="" />
+              </button>
+            </div>
+          </div>
+          <div class="home-balance-card">
+            <span class="home-balance-label">Balance</span>
+            <div class="home-balance-row">
+              <span class="home-balance-amount">$17,<span>657</span><span class="cents">.89</span></span>
+              <div class="home-balance-chevron">
+                <img src="assets/arrow-down-chevron.svg" width="20" height="20" alt="" />
+              </div>
+            </div>
+          </div>
+          <div class="home-actions">
+            <button class="home-action" id="homeActionSend">
+              <div class="home-action-icon"><img src="assets/icon-send.svg" width="24" height="24" alt="" /></div>
+              <span class="home-action-label">Send</span>
+            </button>
+            <button class="home-action">
+              <div class="home-action-icon"><img src="assets/icon-receive.svg" width="24" height="24" alt="" /></div>
+              <span class="home-action-label">Receive</span>
+            </button>
+            <button class="home-action" id="homeActionShield">
+              <div class="home-action-icon"><img src="assets/icon-shield.svg" width="24" height="24" alt="" /></div>
+              <span class="home-action-label">Shield</span>
+            </button>
+            <button class="home-action">
+              <div class="home-action-icon"><img src="assets/icon-swap.svg" width="24" height="24" alt="" /></div>
+              <span class="home-action-label">Swap</span>
+            </button>
+            <button class="home-action">
+              <div class="home-action-icon"><img src="assets/icon-records.svg" width="24" height="24" alt="" /></div>
+              <span class="home-action-label">Records</span>
+            </button>
+          </div>
+          <div class="home-tokens">
+            <div class="home-tabs">
+              <button class="home-tab active">All</button>
+              <button class="home-tab">Public</button>
+              <button class="home-tab">Private</button>
+            </div>
+            <div class="home-token-list">
+              <div class="home-token-row">
+                <div class="home-token-icon"><img src="assets/aleo-token-v1.svg" alt="" /></div>
+                <div class="home-token-info">
+                  <div class="home-token-left">
+                    <span class="home-token-name">ALEO</span>
+                    <span class="home-token-bal">125,077 ALEO</span>
+                  </div>
+                  <div class="home-token-right">
+                    <span class="home-token-usd">$15,009</span>
+                  </div>
+                </div>
+              </div>
+              <div class="home-token-row">
+                <div class="home-token-icon"><img src="assets/pondo-token.png" alt="Pondo" /></div>
+                <div class="home-token-info">
+                  <div class="home-token-left">
+                    <span class="home-token-name">Pondo</span>
+                    <span class="home-token-bal">3,171,936 PNDO</span>
+                  </div>
+                  <div class="home-token-right">
+                    <span class="home-token-usd">$2,648</span>
+                  </div>
+                </div>
+              </div>
+              <div class="home-token-row">
+                <div class="home-token-icon"><img src="assets/vusdc-token.png" alt="vUSDC" /></div>
+                <div class="home-token-info">
+                  <div class="home-token-left">
+                    <span class="home-token-name">vUSDC</span>
+                    <span class="home-token-bal">0 VUSDC</span>
+                  </div>
+                  <div class="home-token-right">
+                    <span class="home-token-usd">$0.00</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="home-bottom-nav">
+          <div class="home-nav-row">
+            <button class="home-nav-item"><img src="assets/nav-home.svg" width="24" height="24" alt="Home" /></button>
+            <button class="home-nav-item"><img src="assets/nav-history.svg" width="24" height="24" alt="History" /></button>
+            <button class="home-nav-item"><img src="assets/nav-settings.svg" width="24" height="24" alt="Settings" /></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         SHIELD CONFIG PAGE
+    ══════════════════════════════════════════ -->
+    <div class="page" id="page-shield">
 
     <!-- ══════════════════════════════════════════
          V1 · Balance / Slider
@@ -865,7 +1805,7 @@
       <div class="header">
         <span class="header__title">Shield</span>
         <div class="header__close">
-          <img src="http://localhost:3845/assets/b0328115606a9f057833a733c4cdf2cf6c80eb12.svg" width="16" height="16" alt="close" />
+          <img src="assets/close-v1.svg" width="16" height="16" alt="close" />
         </div>
       </div>
 
@@ -877,13 +1817,16 @@
             <div class="tick"></div><div class="tick"></div><div class="tick"></div>
             <div class="tick"></div><div class="tick"></div><div class="tick"></div>
           </div>
-          <!-- fill: clips gradient to active width -->
-          <div class="v1-slider__fill" id="v1SliderFill">
-            <img class="v1-slider__fill-bg" src="http://localhost:3845/assets/05533b62e7637737726ced2229e3a69e70f37e10.png" alt="" />
+          <!-- fill: initial 60%; fill-bg opacity 0 until Rive loads (no flash) -->
+          <div class="v1-slider__fill" id="v1SliderFill" style="width: 192px">
+            <div class="v1-slider__fill-bg" id="v1SliderFillImg" style="opacity: 0">
+              <img class="v1-slider__fill-bg-img" src="assets/slider-gradient.png" alt="" />
+              <canvas id="v1SliderRiveCanvas" width="288" height="40"></canvas>
+            </div>
           </div>
-          <!-- thumb pill: draggable, sits above fill -->
-          <div class="v1-slider__thumb" id="v1SliderThumb">
-            <span class="v1-slider__pill-label" id="v1SliderLabel">100%</span>
+          <!-- thumb pill: initial 60% so no flash -->
+          <div class="v1-slider__thumb" id="v1SliderThumb" style="left: 148px">
+            <span class="v1-slider__pill-label" id="v1SliderLabel">60%</span>
           </div>
         </div>
       </div>
@@ -893,37 +1836,41 @@
         <div class="v1-bal-card">
           <span class="v1-bal-card__label">Public</span>
           <div class="v1-bal-card__amount">
-            <input type="text" inputmode="decimal" value="40,000" data-bal="pub" />
-            <span>ALEO</span>
+            <number-flow id="nfPubAmt" style="display:none"></number-flow>
+            <span class="v1-drag-num" id="dragPubAmt">40,000</span>
+            <input type="text" inputmode="decimal" value="40,000" data-bal="pub" style="display:none" />
+            <span id="v1PubTicker">ALEO</span>
           </div>
           <div class="v1-bal-card__usd">
             <span class="v1-bal-card__usd-val" id="v1PubUsd">$3,200</span>
-            <img class="v1-bal-card__usd-icon" src="http://localhost:3845/assets/be8bc8ba730138c466feaec2a3baca93dc6cc4ed.svg" alt="" />
           </div>
         </div>
         <div class="v1-cards-div">
           <div class="v1-cards-div__inner">
-            <img src="http://localhost:3845/assets/d2ac3a89c1cf8ddfc1d7036b13701f2fc33e5e1d.svg" alt="" />
+            <img class="divider-inactive" src="assets/divider-inactive.svg" alt="" />
+            <img class="divider-left" src="assets/divider-left.svg" alt="" />
+            <img class="divider-right" src="assets/divider-right.svg" alt="" />
           </div>
         </div>
         <div class="v1-bal-card">
           <span class="v1-bal-card__label">Shielded</span>
           <div class="v1-bal-card__amount">
-            <input type="text" inputmode="decimal" value="60,000" data-bal="shld" />
-            <span>ALEO</span>
+            <number-flow id="nfShldAmt" style="display:none"></number-flow>
+            <span class="v1-drag-num" id="dragShldAmt">60,000</span>
+            <input type="text" inputmode="decimal" value="60,000" data-bal="shld" style="display:none" />
+            <span id="v1ShldTicker">ALEO</span>
           </div>
           <div class="v1-bal-card__usd">
             <span class="v1-bal-card__usd-val" id="v1ShldUsd">$4,800</span>
-            <img class="v1-bal-card__usd-icon" src="http://localhost:3845/assets/be8bc8ba730138c466feaec2a3baca93dc6cc4ed.svg" alt="" />
           </div>
         </div>
       </div>
 
       <!-- Token row -->
-      <div class="v1-token-row">
+      <div class="v1-token-row" id="v1TokenRow">
         <div class="v1-token-row__left">
           <div class="v1-token-icon">
-            <img src="http://localhost:3845/assets/d82dbf794df179b00acd07155a8cfe08ab8de403.svg" alt="Aleo" />
+            <img src="assets/aleo-token-v1.svg" alt="Aleo" />
           </div>
           <div>
             <div class="v1-token-name">ALEO</div>
@@ -941,6 +1888,53 @@
         <span class="v1-cta__label">Choose how much to shield</span>
       </button>
 
+      <!-- Refresh -->
+      <button class="v1-refresh" id="v1Refresh" title="Reset">
+        <img src="assets/reset.svg" width="20" height="20" alt="" style="display:block;opacity:0.7" />
+      </button>
+
+      <!-- Token selection overlay -->
+      <div class="token-overlay" id="v1TokenOverlay">
+        <div class="token-overlay__header">
+          <button class="token-overlay__back" id="v1TokenBack">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12.5 15L7.5 10L12.5 5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <span class="token-overlay__title">Select token</span>
+          <div class="token-overlay__spacer"></div>
+        </div>
+        <div class="token-overlay__search">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="rgba(255,255,255,0.48)" stroke-width="1.5"/><path d="M13 13L17 17" stroke="rgba(255,255,255,0.48)" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span class="token-overlay__placeholder">Token name</span>
+        </div>
+        <div class="token-overlay__list">
+          <div class="token-overlay__item token-overlay__item--selected">
+            <div class="token-overlay__icon"><img src="assets/aleo-token-v1.svg" alt="Aleo"/></div>
+            <div class="token-overlay__info"><span class="token-overlay__name">ALEO</span><span class="token-overlay__bal">100,000 Aleo</span></div>
+            <span class="token-overlay__usd-val">$8,000</span>
+          </div>
+          <div class="token-overlay__item">
+            <div class="token-overlay__icon"><img src="assets/aleo-token-v1.svg" alt="Aleo"/></div>
+            <div class="token-overlay__info"><span class="token-overlay__name">ALEO</span><span class="token-overlay__bal">2,342.5 Aleo</span></div>
+            <span class="token-overlay__usd-val">$1,737.25</span>
+          </div>
+          <div class="token-overlay__item">
+            <div class="token-overlay__icon"><img src="assets/aleo-token-v1.svg" alt="Aleo"/></div>
+            <div class="token-overlay__info"><span class="token-overlay__name">ALEO</span><span class="token-overlay__bal">2,342.5 Aleo</span></div>
+            <span class="token-overlay__usd-val">$1,737.25</span>
+          </div>
+          <div class="token-overlay__item">
+            <div class="token-overlay__icon"><img src="assets/aleo-token-v1.svg" alt="Aleo"/></div>
+            <div class="token-overlay__info"><span class="token-overlay__name">ALEO</span><span class="token-overlay__bal">2,342.5 Aleo</span></div>
+            <span class="token-overlay__usd-val">$1,737.25</span>
+          </div>
+          <div class="token-overlay__item">
+            <div class="token-overlay__icon"><img src="assets/aleo-token-v1.svg" alt="Aleo"/></div>
+            <div class="token-overlay__info"><span class="token-overlay__name">ALEO</span><span class="token-overlay__bal">2,342.5 Aleo</span></div>
+            <span class="token-overlay__usd-val">$1,737.25</span>
+          </div>
+        </div>
+      </div>
+
     </div><!-- /card-v1 -->
 
 
@@ -952,7 +1946,7 @@
       <div class="header">
         <span class="header__title">Shield</span>
         <div class="header__close">
-          <img src="http://localhost:3845/assets/d61f231374c268baf1c0c9654343e9c130b027f6.svg" width="16" height="16" alt="close" />
+          <img src="assets/close.svg" width="16" height="16" alt="close" />
         </div>
       </div>
 
@@ -964,7 +1958,7 @@
         </div>
         <div class="v2-usd">
           <span class="v2-usd__val">$0</span>
-          <img class="v2-usd__icon" src="http://localhost:3845/assets/be8bc8ba730138c466feaec2a3baca93dc6cc4ed.svg" alt="" />
+          <img class="v2-usd__icon" src="assets/usd.svg" alt="" />
         </div>
         <div class="v2-pct-row">
           <button class="v2-pct-btn">25%</button>
@@ -985,12 +1979,12 @@
           <div class="v2-token-row">
             <div class="v2-token-row__left">
               <div class="v2-token-icon">
-                <img src="http://localhost:3845/assets/cb9c587c6a58d3ea31dc0ea28677bfa8c9e1cbc7.svg" alt="Aleo" />
+                <img src="assets/aleo-token.svg" alt="Aleo" />
               </div>
               <span class="v2-token-name">ALEO</span>
             </div>
             <div class="v2-token-arrow-wrap">
-              <img class="v2-token-arrow-vector" src="http://localhost:3845/assets/e169592a1a6e239ffcf21fa12435c1823d07e993.svg" alt="" />
+              <img class="v2-token-arrow-vector" src="assets/arrow-down.svg" alt="" />
             </div>
           </div>
           <div class="v2-amounts-bar">
@@ -1024,7 +2018,7 @@
       <div class="header">
         <span class="header__title">Shield</span>
         <div class="header__close">
-          <img src="http://localhost:3845/assets/b0328115606a9f057833a733c4cdf2cf6c80eb12.svg" width="16" height="16" alt="close" />
+          <img src="assets/close-v1.svg" width="16" height="16" alt="close" />
         </div>
       </div>
 
@@ -1032,10 +2026,10 @@
       <div class="v3-overlay"></div>
 
       <!-- Token row -->
-      <div class="v3-token-row">
+      <div class="v3-token-row" id="v3TokenRow">
         <div class="v3-token-row__left">
           <div class="v1-token-icon">
-            <img src="http://localhost:3845/assets/d82dbf794df179b00acd07155a8cfe08ab8de403.svg" alt="Aleo" />
+            <img src="assets/aleo-token-v1.svg" alt="Aleo" />
           </div>
           <div>
             <div class="v1-token-name">ALEO</div>
@@ -1049,15 +2043,22 @@
       </div>
 
       <!-- Two vertical slider cards -->
-      <div class="v3-cards">
+      <div class="v3-cards v3-cards--dragging">
 
         <!-- Public card -->
         <div class="v3-bal-card" id="v3PubCard">
-          <div class="v3-card-fill" id="v3PubFill"></div>
+          <div class="v3-card-fill" id="v3PubFill">
+            <div class="v3-card-fill-bg" id="v3PubFillImg">
+              <img class="v3-card-fill-bg-img" src="assets/slider-gradient.png" alt="" />
+              <canvas id="v3PubRiveCanvas"></canvas>
+            </div>
+          </div>
           <div class="v3-card-header">
             <span class="v3-card-label">Public</span>
-            <div class="v3-card-amounts">
+            <div class="v3-card-amounts" id="v3PubAmounts">
+              <number-flow class="v3-card-nf" id="v3PubNf" style="display:none"></number-flow>
               <span class="v3-card-token" id="v3PubToken">40,000</span>
+              <input class="v3-card-input" id="v3PubInput" type="text" inputmode="decimal" value="40,000" style="display:none" />
               <span class="v3-card-usd" id="v3PubUsd">$3,200</span>
             </div>
           </div>
@@ -1070,16 +2071,23 @@
           <div class="v3-pill" id="v3PubPill">
             <span class="v3-pill-label" id="v3PubPillLabel">36%</span>
           </div>
-          <div class="v3-pill-line" id="v3PubPillLine"></div>
+          <div class="v3-pill-line" id="v3PubPillLine"><img src="assets/drag-handle.svg" width="18" height="10" alt="" /></div>
         </div>
 
         <!-- Shielded card -->
         <div class="v3-bal-card" id="v3ShldCard">
-          <div class="v3-card-fill" id="v3ShldFill"></div>
+          <div class="v3-card-fill" id="v3ShldFill">
+            <div class="v3-card-fill-bg" id="v3ShldFillImg">
+              <img class="v3-card-fill-bg-img" src="assets/slider-gradient.png" alt="" />
+              <canvas id="v3ShldRiveCanvas"></canvas>
+            </div>
+          </div>
           <div class="v3-card-header">
             <span class="v3-card-label">Shielded</span>
-            <div class="v3-card-amounts">
+            <div class="v3-card-amounts" id="v3ShldAmounts">
+              <number-flow class="v3-card-nf" id="v3ShldNf" style="display:none"></number-flow>
               <span class="v3-card-token" id="v3ShldToken">60,000</span>
+              <input class="v3-card-input" id="v3ShldInput" type="text" inputmode="decimal" value="60,000" style="display:none" />
               <span class="v3-card-usd" id="v3ShldUsd">$4,800</span>
             </div>
           </div>
@@ -1092,7 +2100,7 @@
           <div class="v3-pill" id="v3ShldPill">
             <span class="v3-pill-label" id="v3ShldPillLabel">64%</span>
           </div>
-          <div class="v3-pill-line" id="v3ShldPillLine"></div>
+          <div class="v3-pill-line" id="v3ShldPillLine"><img src="assets/drag-handle.svg" width="18" height="10" alt="" /></div>
         </div>
 
       </div>
@@ -1102,7 +2110,105 @@
         <span class="v3-cta__label">Specify amount</span>
       </button>
 
+      <!-- Refresh -->
+      <button class="v3-refresh" id="v3Refresh" title="Reset">
+        <img src="assets/reset.svg" width="20" height="20" alt="" style="display:block;opacity:0.7" />
+      </button>
+
+      <!-- Token selection overlay -->
+      <div class="token-overlay" id="v3TokenOverlay">
+        <div class="token-overlay__header">
+          <button class="token-overlay__back" id="v3TokenBack">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12.5 15L7.5 10L12.5 5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <span class="token-overlay__title">Select token</span>
+          <div class="token-overlay__spacer"></div>
+        </div>
+        <div class="token-overlay__search">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="rgba(255,255,255,0.48)" stroke-width="1.5"/><path d="M13 13L17 17" stroke="rgba(255,255,255,0.48)" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span class="token-overlay__placeholder">Token name</span>
+        </div>
+        <div class="token-overlay__list">
+          <div class="token-overlay__item token-overlay__item--selected">
+            <div class="token-overlay__icon"><img src="assets/aleo-token-v1.svg" alt="Aleo"/></div>
+            <div class="token-overlay__info"><span class="token-overlay__name">ALEO</span><span class="token-overlay__bal">100,000 Aleo</span></div>
+            <span class="token-overlay__usd-val">$8,000</span>
+          </div>
+          <div class="token-overlay__item">
+            <div class="token-overlay__icon"><img src="assets/aleo-token-v1.svg" alt="Aleo"/></div>
+            <div class="token-overlay__info"><span class="token-overlay__name">ALEO</span><span class="token-overlay__bal">2,342.5 Aleo</span></div>
+            <span class="token-overlay__usd-val">$1,737.25</span>
+          </div>
+          <div class="token-overlay__item">
+            <div class="token-overlay__icon"><img src="assets/aleo-token-v1.svg" alt="Aleo"/></div>
+            <div class="token-overlay__info"><span class="token-overlay__name">ALEO</span><span class="token-overlay__bal">2,342.5 Aleo</span></div>
+            <span class="token-overlay__usd-val">$1,737.25</span>
+          </div>
+          <div class="token-overlay__item">
+            <div class="token-overlay__icon"><img src="assets/aleo-token-v1.svg" alt="Aleo"/></div>
+            <div class="token-overlay__info"><span class="token-overlay__name">ALEO</span><span class="token-overlay__bal">2,342.5 Aleo</span></div>
+            <span class="token-overlay__usd-val">$1,737.25</span>
+          </div>
+          <div class="token-overlay__item">
+            <div class="token-overlay__icon"><img src="assets/aleo-token-v1.svg" alt="Aleo"/></div>
+            <div class="token-overlay__info"><span class="token-overlay__name">ALEO</span><span class="token-overlay__bal">2,342.5 Aleo</span></div>
+            <span class="token-overlay__usd-val">$1,737.25</span>
+          </div>
+        </div>
+      </div>
+
     </div><!-- /card-v3 -->
+
+    </div><!-- /page-shield -->
+
+    <!-- ══════════════════════════════════════════
+         CONFIRM PAGE (Shielding / Unshielding)
+    ══════════════════════════════════════════ -->
+    <div class="page" id="page-confirm">
+      <div class="confirm">
+        <div class="confirm-handle">
+          <button class="confirm-back" id="confirmBack">
+            <img src="assets/chevron-left.svg" width="20" height="20" alt="Back" />
+          </button>
+        </div>
+        <h1 class="confirm-title" id="confirmTitle">Shielding</h1>
+        <div class="confirm-from">
+          <span class="confirm-from-text">From</span>
+          <div class="confirm-from-dot"></div>
+          <span class="confirm-from-text">1BHfd...nSUh</span>
+        </div>
+        <div class="confirm-card">
+          <div class="confirm-card-inner">
+            <div class="confirm-token-icon">
+              <img src="assets/aleo-token-v1.svg" alt="" />
+            </div>
+            <div class="confirm-amounts">
+              <span class="confirm-amount" id="confirmAmount">2,342.5 ALEO</span>
+              <span class="confirm-usd" id="confirmUsd">$1,737.25</span>
+            </div>
+          </div>
+        </div>
+        <div class="confirm-direction">
+          <div class="confirm-direction-bg"></div>
+          <img class="confirm-direction-bridge" src="assets/mid.png" alt="" />
+          <div class="confirm-direction-row">
+            <div class="confirm-dir-col">
+              <img src="assets/icon-private.svg" width="20" height="20" alt="" id="confirmFromIcon" />
+              <span class="confirm-dir-label" id="confirmFromLabel">Public</span>
+            </div>
+            <div class="confirm-dir-arrow">
+              <img src="assets/arrow-right.svg" width="14" height="12" alt="" />
+            </div>
+            <div class="confirm-dir-col">
+              <img src="assets/confirm-icon-private.svg" width="20" height="20" alt="" id="confirmToIcon" />
+              <span class="confirm-dir-label" id="confirmToLabel">Private</span>
+            </div>
+          </div>
+        </div>
+        <span class="confirm-fee">No network fee</span>
+        <button class="confirm-send-btn" id="confirmSendBtn"><span>Send</span></button>
+      </div>
+    </div><!-- /page-confirm -->
 
   </div><!-- /screen -->
 
@@ -1115,6 +2221,7 @@
     <button class="switcher__btn" data-target="card-v3">Sliders</button>
   </div>
 
+<script src="https://unpkg.com/@rive-app/canvas"></script>
 <script>
   /* ── Mock data ── */
   const TOTAL_ALEO = 100000;
@@ -1126,6 +2233,104 @@
   function fmtUsd(n) {
     return '$' + Math.round(n).toLocaleString('en-US');
   }
+
+
+  /* ── Page navigation with slide transitions ── */
+  const allPages = document.querySelectorAll('.page');
+  const switcherEl = document.querySelector('.switcher');
+  const PAGE_ORDER = ['page-home', 'page-shield', 'page-confirm'];
+  const PAGE_ANIM_MS = 320;
+  let currentPageId = 'page-home';
+
+  // Initial state: home visible/current, others off-screen
+  document.getElementById('page-home').classList.add('is-visible', 'is-current');
+
+  function navigateTo(pageId) {
+    if (pageId === currentPageId) return;
+    const fromEl = document.getElementById(currentPageId);
+    const toEl   = document.getElementById(pageId);
+    if (!fromEl || !toEl) return;
+
+    const fromIndex = PAGE_ORDER.indexOf(currentPageId);
+    const toIndex   = PAGE_ORDER.indexOf(pageId);
+    const dir = toIndex > fromIndex ? 1 : -1; // 1 = forward, -1 = back
+
+    // Make target visible and start it off-screen based on direction
+    toEl.classList.add('is-visible');
+    toEl.style.transform = dir > 0 ? 'translateX(100%)' : 'translateX(-100%)';
+    toEl.style.opacity = '0';
+
+    // Ensure current page is at 0 before anim
+    fromEl.classList.add('is-visible', 'is-current');
+    fromEl.style.transform = 'translateX(0)';
+    fromEl.style.opacity = '1';
+
+    // Force reflow before applying transition targets
+    void toEl.offsetWidth;
+
+    // Slide new page in, fade it up; fade and nudge old page out
+    toEl.style.transform = 'translateX(0)';
+    toEl.style.opacity = '1';
+    fromEl.style.transform = dir > 0 ? 'translateX(-20%)' : 'translateX(20%)';
+    fromEl.style.opacity = '0';
+
+    setTimeout(() => {
+      fromEl.classList.remove('is-visible', 'is-current');
+      fromEl.style.transform = dir > 0 ? 'translateX(100%)' : 'translateX(-100%)';
+      fromEl.style.opacity = '0';
+      toEl.classList.add('is-current');
+      currentPageId = pageId;
+    }, PAGE_ANIM_MS);
+
+  }
+
+  /* Home → Shield (via Shield action button) */
+  document.getElementById('homeActionShield').addEventListener('click', () => navigateTo('page-shield'));
+  document.getElementById('homeActionSend').addEventListener('click', () => navigateTo('page-shield'));
+
+  /* Shield → Home (close button) */
+  document.querySelectorAll('.header__close').forEach(btn => {
+    btn.addEventListener('click', () => navigateTo('page-home'));
+  });
+
+  /* Shield CTA → Confirm */
+  function goToConfirm(isShielding, aleoAmt) {
+    document.getElementById('confirmTitle').textContent = isShielding ? 'Shielding' : 'Unshielding';
+    document.getElementById('confirmAmount').textContent = fmtAleo(aleoAmt) + ' ALEO';
+    document.getElementById('confirmUsd').textContent = fmtUsd(aleoAmt * ALEO_PRICE);
+
+    const fromIcon = document.getElementById('confirmFromIcon');
+    const toIcon = document.getElementById('confirmToIcon');
+    const fromLabel = document.getElementById('confirmFromLabel');
+    const toLabel = document.getElementById('confirmToLabel');
+
+    if (isShielding) {
+      fromIcon.src = 'assets/confirm-icon-public.svg';
+      toIcon.src = 'assets/confirm-icon-private.svg';
+      fromLabel.textContent = 'Public';
+      toLabel.textContent = 'Private';
+    } else {
+      fromIcon.src = 'assets/confirm-icon-private.svg';
+      toIcon.src = 'assets/confirm-icon-public.svg';
+      fromLabel.textContent = 'Private';
+      toLabel.textContent = 'Public';
+    }
+
+    navigateTo('page-confirm');
+  }
+
+  /* Confirm → back to Shield */
+  document.getElementById('confirmBack').addEventListener('click', () => navigateTo('page-shield'));
+
+  /* Home tabs */
+  document.querySelectorAll('.home-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.home-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+    });
+  });
+
+  /* Hide switcher initially (Home is shown first) */
 
   /* ── Version switcher ── */
   const switcherBtns = document.querySelectorAll('.switcher__btn');
@@ -1142,21 +2347,62 @@
 
   /* ── V1: draggable slider + CTA ── */
   (function () {
-    const TRACK_W   = 288;
-    const THUMB_W   = 40;
-    const THUMB_PAD = 4;
+    const TRACK_W     = 288;
+    const THUMB_W     = 40;
+    const THUMB_PAD   = 4;
+    const ZERO_OFFSET = 4;
     const V1_INIT_SHIELDED = 60000;
 
     const slider   = document.getElementById('v1Slider');
     const fill     = document.getElementById('v1SliderFill');
+    const fillImg  = document.getElementById('v1SliderFillImg');
     const thumb    = document.getElementById('v1SliderThumb');
     const label    = document.getElementById('v1SliderLabel');
     const v1Cta      = document.querySelector('.v1-cta');
     const v1CtaLabel = document.querySelector('.v1-cta__label');
-    const pubInput   = document.querySelector('input[data-bal="pub"]');
-    const shldInput  = document.querySelector('input[data-bal="shld"]');
+    const pubInput    = document.querySelector('input[data-bal="pub"]');
+    const shldInput   = document.querySelector('input[data-bal="shld"]');
+    const v1PubUsd    = document.getElementById('v1PubUsd');
+    const v1ShldUsd   = document.getElementById('v1ShldUsd');
+    const nfPubAmt    = document.getElementById('nfPubAmt');
+    const nfShldAmt   = document.getElementById('nfShldAmt');
+    const dragPubAmt  = document.getElementById('dragPubAmt');
+    const dragShldAmt = document.getElementById('dragShldAmt');
 
     let pct = 100;
+    let v1RiveReady = false;
+    let usdMode = false;
+    let nfReady = false;
+    let usingNF = false;
+
+    const v1PubTicker  = document.getElementById('v1PubTicker');
+    const v1ShldTicker = document.getElementById('v1ShldTicker');
+
+    function showNF() {
+      usingNF = true;
+      nfPubAmt.style.display   = nfShldAmt.style.display   = '';
+      dragPubAmt.style.display = dragShldAmt.style.display = 'none';
+      pubInput.style.display   = shldInput.style.display   = 'none';
+    }
+    function showDrag() {
+      usingNF = false;
+      nfPubAmt.style.display   = nfShldAmt.style.display   = 'none';
+      dragPubAmt.style.display = dragShldAmt.style.display = '';
+      pubInput.style.display   = shldInput.style.display   = 'none';
+    }
+    function showInput(isPub) {
+      if (isPub) {
+        nfPubAmt.style.display = 'none'; dragPubAmt.style.display = 'none'; pubInput.style.display = '';
+        shldInput.style.display = 'none';
+        nfShldAmt.style.display  = usingNF ? '' : 'none';
+        dragShldAmt.style.display = usingNF ? 'none' : '';
+      } else {
+        nfShldAmt.style.display = 'none'; dragShldAmt.style.display = 'none'; shldInput.style.display = '';
+        pubInput.style.display = 'none';
+        nfPubAmt.style.display  = usingNF ? '' : 'none';
+        dragPubAmt.style.display = usingNF ? 'none' : '';
+      }
+    }
 
     function updateCta() {
       const currentShielded = Math.round(TOTAL_ALEO * pct / 100);
@@ -1171,35 +2417,128 @@
       }
     }
 
-    function applyValue(p) {
-      pct = Math.min(100, Math.max(0, p));
-      const fillW = Math.round((pct / 100) * TRACK_W);
-      const clampedFill = Math.max(THUMB_W + THUMB_PAD * 2, fillW);
-      fill.style.width  = clampedFill + 'px';
-      thumb.style.left  = (clampedFill - THUMB_W - THUMB_PAD) + 'px';
-      label.textContent = Math.round(pct) + '%';
+    v1Cta.addEventListener('click', () => {
+      if (!v1Cta.classList.contains('is-active')) return;
+      const currentShielded = Math.round(TOTAL_ALEO * pct / 100);
+      const delta = currentShielded - V1_INIT_SHIELDED;
+      goToConfirm(delta > 0, Math.abs(delta));
+    });
 
+    function refreshCards() {
       const shieldedAmt = Math.round(TOTAL_ALEO * pct / 100);
       const publicAmt   = TOTAL_ALEO - shieldedAmt;
-      pubInput.value  = fmtAleo(publicAmt);
-      shldInput.value = fmtAleo(shieldedAmt);
-      pubInput.style.width  = Math.max(1, pubInput.value.length)  + 'ch';
-      shldInput.style.width = Math.max(1, shldInput.value.length) + 'ch';
-      document.getElementById('v1PubUsd').textContent  = fmtUsd(publicAmt   * ALEO_PRICE);
-      document.getElementById('v1ShldUsd').textContent = fmtUsd(shieldedAmt * ALEO_PRICE);
+
+      if (usdMode) {
+        const pubUsdRaw  = Math.round(publicAmt * ALEO_PRICE);
+        const shldUsdRaw = Math.round(shieldedAmt * ALEO_PRICE);
+        dragPubAmt.textContent  = fmtUsd(pubUsdRaw);
+        dragShldAmt.textContent = fmtUsd(shldUsdRaw);
+        pubInput.value  = fmtUsd(pubUsdRaw);
+        shldInput.value = fmtUsd(shldUsdRaw);
+        pubInput.style.width  = Math.max(1, pubInput.value.length)  + 'ch';
+        shldInput.style.width = Math.max(1, shldInput.value.length) + 'ch';
+        v1PubTicker.textContent  = '';
+        v1ShldTicker.textContent = '';
+        v1PubUsd.textContent  = fmtAleo(publicAmt) + ' ALEO';
+        v1ShldUsd.textContent = fmtAleo(shieldedAmt) + ' ALEO';
+      } else {
+        dragPubAmt.textContent  = fmtAleo(publicAmt);
+        dragShldAmt.textContent = fmtAleo(shieldedAmt);
+        pubInput.value  = fmtAleo(publicAmt);
+        shldInput.value = fmtAleo(shieldedAmt);
+        pubInput.style.width  = Math.max(1, pubInput.value.length)  + 'ch';
+        shldInput.style.width = Math.max(1, shldInput.value.length) + 'ch';
+        v1PubTicker.textContent  = 'ALEO';
+        v1ShldTicker.textContent = 'ALEO';
+        v1PubUsd.textContent  = fmtUsd(Math.round(publicAmt * ALEO_PRICE));
+        v1ShldUsd.textContent = fmtUsd(Math.round(shieldedAmt * ALEO_PRICE));
+      }
+    }
+
+    function animateBothNF() {
+      if (!nfReady) return;
+      const shieldedAmt = Math.round(TOTAL_ALEO * pct / 100);
+      const publicAmt   = TOTAL_ALEO - shieldedAmt;
+      /* Show first so number-flow can measure element dimensions for animation */
+      showNF();
+      nfPubAmt.animated = nfShldAmt.animated = true;
+      requestAnimationFrame(() => {
+        if (usdMode) {
+          nfPubAmt.numberPrefix = nfShldAmt.numberPrefix = '$';
+          nfPubAmt.update(Math.round(publicAmt * ALEO_PRICE));
+          nfShldAmt.update(Math.round(shieldedAmt * ALEO_PRICE));
+        } else {
+          nfPubAmt.numberPrefix = nfShldAmt.numberPrefix = '';
+          nfPubAmt.update(publicAmt);
+          nfShldAmt.update(shieldedAmt);
+        }
+      });
+    }
+
+    function applyValue(p) {
+      pct = Math.min(100, Math.max(0, p));
+      const maxLeft = TRACK_W - THUMB_W - THUMB_PAD;
+      const range   = maxLeft - ZERO_OFFSET;
+      const thumbLeft = Math.round(ZERO_OFFSET + (pct / 100) * range);
+      const fillWidth = thumbLeft + THUMB_W + THUMB_PAD;
+      fill.style.width  = fillWidth + 'px';
+      if (fillImg && v1RiveReady) fillImg.style.opacity = String(pct / 100);
+      thumb.style.left  = thumbLeft + 'px';
+      label.textContent = Math.round(pct) + '%';
+      refreshCards();
       updateCta();
     }
 
     function pctFromEvent(e) {
       const rect = slider.getBoundingClientRect();
       const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-      return (x / TRACK_W) * 100;
+      const maxLeft = TRACK_W - THUMB_W - THUMB_PAD;
+      const range   = maxLeft - ZERO_OFFSET;
+      const thumbLeft = Math.max(ZERO_OFFSET, Math.min(x, maxLeft));
+      return ((thumbLeft - ZERO_OFFSET) / range) * 100;
     }
 
-    let dragging = false;
-    function onStart(e) { dragging = true; applyValue(pctFromEvent(e)); e.preventDefault(); }
-    function onMove(e)  { if (!dragging) return; applyValue(pctFromEvent(e)); e.preventDefault(); }
-    function onEnd()    { dragging = false; }
+    /* Drag vs click distinction:
+       – pointerDown: finger/mouse is held on slider
+       – isDragging: pointer moved beyond threshold → no NF reroll
+       On a plain click (< threshold movement), isDragging stays false so NF
+       animates to the new value. On a drag isDragging = true so NF is hidden
+       and only the plain drag span updates; NF animates to final on release. */
+    const DRAG_THRESHOLD = 6;
+    let pointerDown = false;
+    let isDragging  = false;
+    let startX = 0;
+
+    function onStart(e) {
+      pointerDown = true;
+      isDragging  = false;
+      startX = e.touches ? e.touches[0].clientX : e.clientX;
+      applyValue(pctFromEvent(e)); /* NF animates on click */
+      e.preventDefault();
+    }
+    function onMove(e) {
+      if (!pointerDown) return;
+      const x = e.touches ? e.touches[0].clientX : e.clientX;
+      if (!isDragging && Math.abs(x - startX) > DRAG_THRESHOLD) {
+        isDragging = true;
+        showDrag();
+        slider.classList.add('is-dragging');
+      }
+      if (isDragging) applyValue(pctFromEvent(e));
+      e.preventDefault();
+    }
+    function onEnd() {
+      if (!pointerDown) return;
+      pointerDown = false;
+      if (isDragging) {
+        isDragging = false;
+        slider.classList.remove('is-dragging');
+        /* stay in span mode after drag — no NF reroll */
+      } else {
+        /* plain click: animate NF for both cards */
+        animateBothNF();
+      }
+    }
 
     slider.addEventListener('mousedown',  onStart);
     slider.addEventListener('touchstart', onStart, { passive: false });
@@ -1208,14 +2547,201 @@
     document.addEventListener('mouseup',  onEnd);
     document.addEventListener('touchend', onEnd);
 
-    // Balance inputs: manual edits also update CTA
+    function formatWithCommas(raw) {
+      const parts = raw.split('.');
+      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      return parts.join('.');
+    }
+
+    function handleBalInput(inp) {
+      const selStart = inp.selectionStart;
+      const prev = inp.value;
+      const stripped = prev.replace(/[$,]/g, '');
+      const cleaned = stripped.replace(/[^\d]/g, '').replace(/^0+(\d)/, '$1');
+      let formatted = cleaned === '' ? '' : formatWithCommas(cleaned);
+      if (usdMode && formatted) formatted = '$' + formatted;
+      if (formatted !== prev) {
+        const commasBefore = (prev.slice(0, selStart).match(/,/g) || []).length;
+        const commasAfter  = (formatted.slice(0, selStart).match(/,/g) || []).length;
+        inp.value = formatted;
+        const newPos = selStart + (commasAfter - commasBefore);
+        inp.setSelectionRange(newPos, newPos);
+      }
+      inp.style.width = Math.max(1, inp.value.length) + 'ch';
+      updateCta();
+    }
+
+    function handleBalBlur(inp, isShielded) {
+      let rawNum = parseInt(inp.value.replace(/[$,]/g, ''), 10) || 0;
+      let aleoAmt = usdMode ? Math.round(rawNum / ALEO_PRICE) : rawNum;
+      aleoAmt = Math.min(Math.max(aleoAmt, 0), TOTAL_ALEO);
+      const newPct = isShielded
+        ? (aleoAmt / TOTAL_ALEO) * 100
+        : ((TOTAL_ALEO - aleoAmt) / TOTAL_ALEO) * 100;
+      pct = Math.min(100, Math.max(0, newPct));
+      const maxLeft = TRACK_W - THUMB_W - THUMB_PAD;
+      const range   = maxLeft - ZERO_OFFSET;
+      const thumbLeft = Math.round(ZERO_OFFSET + (pct / 100) * range);
+      fill.style.width = (thumbLeft + THUMB_W + THUMB_PAD) + 'px';
+      if (fillImg && v1RiveReady) fillImg.style.opacity = String(pct / 100);
+      thumb.style.left = thumbLeft + 'px';
+      label.textContent = Math.round(pct) + '%';
+      refreshCards();
+      updateCta();
+
+      const shieldedAmt = Math.round(TOTAL_ALEO * pct / 100);
+      const publicAmt   = TOTAL_ALEO - shieldedAmt;
+
+      if (nfReady) {
+        /* Show first so number-flow can measure for animation */
+        showNF();
+        /* edited card snaps (animated=false); other card rolls (animated=true) */
+        nfPubAmt.animated  = isShielded;   /* pub is "other" when editing shld */
+        nfShldAmt.animated = !isShielded;  /* shld is "other" when editing pub */
+        const _pub = publicAmt, _shld = shieldedAmt, _usd = usdMode;
+        requestAnimationFrame(() => {
+          if (_usd) {
+            nfPubAmt.numberPrefix = nfShldAmt.numberPrefix = '$';
+            nfPubAmt.update(Math.round(_pub * ALEO_PRICE));
+            nfShldAmt.update(Math.round(_shld * ALEO_PRICE));
+          } else {
+            nfPubAmt.numberPrefix = nfShldAmt.numberPrefix = '';
+            nfPubAmt.update(_pub);
+            nfShldAmt.update(_shld);
+          }
+        });
+      } else {
+        showDrag();
+      }
+    }
+
     [pubInput, shldInput].forEach(inp => {
-      function resize() { inp.style.width = Math.max(1, inp.value.length) + 'ch'; }
-      inp.addEventListener('input', () => { resize(); updateCta(); });
-      resize();
+      inp.addEventListener('keydown', (e) => {
+        const val = inp.value.replace(/[$,]/g, '');
+        if (val === '0' && e.key >= '1' && e.key <= '9') inp.value = '';
+      });
+    });
+
+    pubInput.addEventListener('input', () => handleBalInput(pubInput));
+    shldInput.addEventListener('input', () => handleBalInput(shldInput));
+    pubInput.addEventListener('blur', () => handleBalBlur(pubInput, false));
+    shldInput.addEventListener('blur', () => handleBalBlur(shldInput, true));
+
+    let isFlipping = false;
+    const allCards = [pubInput.closest('.v1-bal-card'), shldInput.closest('.v1-bal-card')];
+
+    function animateSwap() {
+      if (isFlipping) return;
+      isFlipping = true;
+      const dur = 150;
+      const ease = 'cubic-bezier(0.4, 0, 0.2, 1)';
+
+      const targets = [];
+      allCards.forEach(card => {
+        const amount = card.querySelector('.v1-bal-card__amount');
+        const usdEl  = card.querySelector('.v1-bal-card__usd');
+        targets.push(amount, usdEl);
+        amount.animate([
+          { opacity: 1, transform: 'translateY(0)' },
+          { opacity: 0, transform: 'translateY(6px)' }
+        ], { duration: dur, easing: ease, fill: 'forwards' });
+        usdEl.animate([
+          { opacity: 1, transform: 'translateY(0)' },
+          { opacity: 0, transform: 'translateY(-6px)' }
+        ], { duration: dur, easing: ease, fill: 'forwards' });
+      });
+
+      setTimeout(() => {
+        targets.forEach(el => el.getAnimations().forEach(a => a.cancel()));
+        usdMode = !usdMode;
+        showDrag(); /* switch to spans — no NF reroll on USD toggle */
+        refreshCards();
+
+        const anims = [];
+        allCards.forEach(card => {
+          const amount = card.querySelector('.v1-bal-card__amount');
+          const usdEl  = card.querySelector('.v1-bal-card__usd');
+          amount.animate([
+            { opacity: 0, transform: 'translateY(-6px)' },
+            { opacity: 1, transform: 'translateY(0)' }
+          ], { duration: dur, easing: ease, fill: 'forwards' });
+          anims.push(usdEl.animate([
+            { opacity: 0, transform: 'translateY(6px)' },
+            { opacity: 1, transform: 'translateY(0)' }
+          ], { duration: dur, easing: ease, fill: 'forwards' }));
+        });
+
+        anims[anims.length - 1].onfinish = () => {
+          targets.forEach(el => el.getAnimations().forEach(a => a.cancel()));
+          isFlipping = false;
+        };
+      }, dur);
+    }
+
+    allCards.forEach((card, i) => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.v1-bal-card__usd')) { animateSwap(); return; }
+        if (e.target.tagName !== 'INPUT') {
+          const inp = i === 0 ? pubInput : shldInput;
+          showInput(i === 0);
+          inp.style.width = Math.max(1, inp.value.length) + 'ch';
+          inp.focus();
+        }
+      });
+    });
+
+    /* Refresh: reset to initial split */
+    document.getElementById('v1Refresh').addEventListener('click', () => {
+      applyValue(60);
+      animateBothNF();
     });
 
     applyValue(60);
+    requestAnimationFrame(() => { slider.classList.add('v1-slider--ready'); });
+
+    /* Enable NF once the custom element is registered */
+    customElements.whenDefined('number-flow').then(() => {
+      nfReady = true;
+      const shieldedAmt = Math.round(TOTAL_ALEO * pct / 100);
+      const publicAmt   = TOTAL_ALEO - shieldedAmt;
+      nfPubAmt.animated = nfShldAmt.animated = false; /* snap without animation on load */
+      nfPubAmt.numberPrefix = nfShldAmt.numberPrefix = '';
+      nfPubAmt.update(publicAmt);
+      nfShldAmt.update(shieldedAmt);
+      showNF();
+    });
+
+    function initV1Rive() {
+      if (typeof rive === 'undefined') { fillImg?.classList.add('has-fallback'); v1RiveReady = true; if (fillImg) fillImg.style.opacity = String(pct / 100); return; }
+      const riveCanvas = document.getElementById('v1SliderRiveCanvas');
+      if (!riveCanvas) { fillImg?.classList.add('has-fallback'); v1RiveReady = true; if (fillImg) fillImg.style.opacity = String(pct / 100); return; }
+      try {
+        const selectors = [1, 2, 4, 5];
+        const selector  = selectors[Math.floor(Math.random() * selectors.length)];
+        const layout = new rive.Layout({ fit: rive.Fit.Cover });
+        const r = new rive.Rive({
+          src: 'bg.riv',
+          canvas: riveCanvas,
+          layout: layout,
+          animations: 'Timeline ' + selector,
+          autoplay: true,
+          onLoad: () => {
+            r.resizeDrawingSurfaceToCanvas();
+            v1RiveReady = true;
+            if (fillImg) fillImg.style.opacity = String(pct / 100);
+          }
+        });
+      } catch (e) {
+        console.warn('Rive V1 init failed:', e);
+        fillImg?.classList.add('has-fallback');
+        v1RiveReady = true;
+        if (fillImg) fillImg.style.opacity = String(pct / 100);
+      }
+    }
+    initV1Rive();
+    if (!v1RiveReady && typeof rive === 'undefined' && document.readyState !== 'complete')
+      window.addEventListener('load', initV1Rive);
+
   })();
 
   /* ── V2: amount input ── */
@@ -1303,31 +2829,127 @@
   (function () {
     const HEADER_H = 95;
     const PILL_H   = 20;
+    const V3_INIT_SHIELDED = 60000;
 
-    function makeSlider(cardId, pillId, fillId, labelId, lineId) {
-      const card  = document.getElementById(cardId);
-      const pill  = document.getElementById(pillId);
-      const fill  = document.getElementById(fillId);
-      const label = document.getElementById(labelId);
-      const line  = document.getElementById(lineId);
+    /* State */
+    let pubPct      = 40;
+    let v3IsDragging = false;
+    let v3DragTarget = null; /* 'pub' | 'shld' | null */
+    let v3UsdMode   = false;
+    let v3NfReady   = false;
+
+    /* Elements */
+    const v3PubNf    = document.getElementById('v3PubNf');
+    const v3ShldNf   = document.getElementById('v3ShldNf');
+    const v3PubSpan  = document.getElementById('v3PubToken');
+    const v3ShldSpan = document.getElementById('v3ShldToken');
+    const v3PubInput  = document.getElementById('v3PubInput');
+    const v3ShldInput = document.getElementById('v3ShldInput');
+    const v3PubUsdEl  = document.getElementById('v3PubUsd');
+    const v3ShldUsdEl = document.getElementById('v3ShldUsd');
+    const v3Cta       = document.querySelector('.v3-cta');
+    const v3CtaLabel  = document.querySelector('.v3-cta__label');
+    const v3CardsEl   = document.querySelector('.v3-cards');
+
+    /* ── Display helpers ── */
+    function v3ShowNF() {
+      if (!v3NfReady) { v3ShowDrag(); return; }
+      v3PubNf.style.display = v3ShldNf.style.display = '';
+      v3PubSpan.style.display = v3ShldSpan.style.display = 'none';
+      v3PubInput.style.display = v3ShldInput.style.display = 'none';
+    }
+    function v3ShowDrag() {
+      v3PubNf.style.display = v3ShldNf.style.display = 'none';
+      v3PubSpan.style.display = v3ShldSpan.style.display = '';
+      v3PubInput.style.display = v3ShldInput.style.display = 'none';
+    }
+    function v3ShowInput(isPub) {
+      /* Always show the span for the "other" card — spans are always current,
+         NF can hold stale values after a mode swap so we avoid showing it here. */
+      if (isPub) {
+        v3PubNf.style.display = 'none'; v3PubSpan.style.display = 'none';
+        v3PubInput.style.display = '';
+        v3ShldInput.style.display = 'none';
+        v3ShldNf.style.display = 'none';
+        v3ShldSpan.style.display = '';
+      } else {
+        v3ShldNf.style.display = 'none'; v3ShldSpan.style.display = 'none';
+        v3ShldInput.style.display = '';
+        v3PubInput.style.display = 'none';
+        v3PubNf.style.display = 'none';
+        v3PubSpan.style.display = '';
+      }
+    }
+
+    /* ── Slider factory ── */
+    function makeSlider(cardId, pillId, fillId, labelId, lineId, riveSelector) {
+      const card    = document.getElementById(cardId);
+      const pill    = document.getElementById(pillId);
+      const fill    = document.getElementById(fillId);
+      const fillImg = document.getElementById(fillId + 'Img');
+      const label   = document.getElementById(labelId);
+      const line    = document.getElementById(lineId);
+      let riveInstance = null;
+      let pillOffsetActive = false;
+      let pillOffsetTimer = null;
 
       function metrics() {
         const cardH    = card.offsetHeight;
-        const fillMaxH = cardH - HEADER_H;
+        const fillMaxH = cardH - HEADER_H - 16;
         return { cardH, fillMaxH };
+      }
+
+      /* Size the Rive canvas to the full card height (not fill height).
+         The fill's overflow:hidden clips the visible portion.
+         This way the drawing buffer never changes as the fill animates → no flicker. */
+      function ensureRive() {
+        if (typeof rive === 'undefined' || !fillImg) return;
+        const canvas = fillImg.querySelector('canvas');
+        const w = fill.offsetWidth;
+        const h = card.offsetHeight;
+        if (!canvas || w <= 0 || h <= 0) return;
+        /* Stretch fill-bg to card height so canvas is always fully drawn */
+        fillImg.style.height = h + 'px';
+        if (!riveInstance) {
+          canvas.width  = w;
+          canvas.height = h;
+          const layout = new rive.Layout({ fit: rive.Fit.Cover });
+          riveInstance = new rive.Rive({
+            src: 'bg.riv', canvas, layout, autoplay: true,
+            ...(riveSelector != null ? { animations: 'Timeline ' + riveSelector } : {}),
+            onLoad: () => { riveInstance.resizeDrawingSurfaceToCanvas(); }
+          });
+        } else if (canvas.width !== w || canvas.height !== h) {
+          /* Only reset drawing buffer on actual dimension change (e.g. window resize) */
+          canvas.width  = w;
+          canvas.height = h;
+          riveInstance.resizeDrawingSurfaceToCanvas();
+        }
       }
 
       function render(pct) {
         pct = Math.min(100, Math.max(0, pct));
         const { cardH, fillMaxH } = metrics();
-        const fillH   = pct / 100 * fillMaxH;
-        fill.style.bottom = '0';
-        fill.style.top    = 'auto';
-        fill.style.height = fillH + 'px';
-        // pill 8px above the fill edge
-        const pillTop = cardH - fillH - PILL_H - 8;
+        if (cardH === 0) return; /* card is hidden — skip so pill.style.top is never set to a garbage value */
+        const fillH = pct / 100 * fillMaxH;
+        fill.style.bottom = '0'; fill.style.top = 'auto'; fill.style.height = fillH + 'px';
+        if (fillImg) fillImg.style.opacity = String(pct / 100);
+        ensureRive();
+        const pillTopRaw = cardH - fillH - PILL_H - 8;
+        const shouldOffset = pillTopRaw < HEADER_H;
+        /* Animate the 48px offset jump whenever the threshold is crossed (not during drag) */
+        if (shouldOffset !== pillOffsetActive) {
+          pillOffsetActive = shouldOffset;
+          if (!v3IsDragging) {
+            pill.classList.add('v3-pill--offset-anim');
+            clearTimeout(pillOffsetTimer);
+            pillOffsetTimer = setTimeout(() => pill.classList.remove('v3-pill--offset-anim'), 150);
+          }
+        }
+        const pillTop = shouldOffset ? pillTopRaw + 32 : pillTopRaw;
         pill.style.top = pillTop + 'px';
-        line.style.top = (cardH - fillH + 8) + 'px';
+        /* handle (10px tall) centered in 40px zone → zone_top = fill_top − 7 puts handle 8px inside fill */
+        line.style.top = (cardH - fillH - 7) + 'px';
         label.textContent = Math.round(pct) + '%';
       }
 
@@ -1341,28 +2963,31 @@
       return { card, pill, render, pctFromEvent };
     }
 
-    const pub  = makeSlider('v3PubCard',  'v3PubPill',  'v3PubFill',  'v3PubPillLabel',  'v3PubPillLine');
+    const pub  = makeSlider('v3PubCard',  'v3PubPill',  'v3PubFill',  'v3PubPillLabel',  'v3PubPillLine',  4);
     const shld = makeSlider('v3ShldCard', 'v3ShldPill', 'v3ShldFill', 'v3ShldPillLabel', 'v3ShldPillLine');
 
-    const v3PubToken  = document.getElementById('v3PubToken');
-    const v3PubUsd    = document.getElementById('v3PubUsd');
-    const v3ShldToken = document.getElementById('v3ShldToken');
-    const v3ShldUsd   = document.getElementById('v3ShldUsd');
-    const v3Cta       = document.querySelector('.v3-cta');
-    const v3CtaLabel  = document.querySelector('.v3-cta__label');
-    const V3_INIT_SHIELDED = 60000;
+    /* ── Amount display updater (span-only, no NF) ── */
+    function updateV3Amounts(pubAmt, shldAmt) {
+      if (v3UsdMode) {
+        v3PubSpan.textContent   = fmtUsd(Math.round(pubAmt * ALEO_PRICE));
+        v3ShldSpan.textContent  = fmtUsd(Math.round(shldAmt * ALEO_PRICE));
+        v3PubUsdEl.textContent  = fmtAleo(Math.round(pubAmt)) + ' ALEO';
+        v3ShldUsdEl.textContent = fmtAleo(Math.round(shldAmt)) + ' ALEO';
+      } else {
+        v3PubSpan.textContent   = fmtAleo(Math.round(pubAmt));
+        v3ShldSpan.textContent  = fmtAleo(Math.round(shldAmt));
+        v3PubUsdEl.textContent  = fmtUsd(Math.round(pubAmt * ALEO_PRICE));
+        v3ShldUsdEl.textContent = fmtUsd(Math.round(shldAmt * ALEO_PRICE));
+      }
+    }
 
-    let pubPct = 40;
     function applyPub(p) {
       pubPct = Math.min(100, Math.max(0, p));
       pub.render(pubPct);
       shld.render(100 - pubPct);
       const pubAmt  = TOTAL_ALEO * pubPct / 100;
       const shldAmt = TOTAL_ALEO - pubAmt;
-      v3PubToken.textContent  = fmtAleo(pubAmt);
-      v3PubUsd.textContent    = fmtUsd(pubAmt  * ALEO_PRICE);
-      v3ShldToken.textContent = fmtAleo(shldAmt);
-      v3ShldUsd.textContent   = fmtUsd(shldAmt * ALEO_PRICE);
+      updateV3Amounts(pubAmt, shldAmt);
 
       const delta = Math.round(shldAmt) - V3_INIT_SHIELDED;
       if (delta !== 0) {
@@ -1374,33 +2999,253 @@
         v3Cta.classList.remove('is-active');
       }
     }
+
+    v3Cta.addEventListener('click', () => {
+      if (!v3Cta.classList.contains('is-active')) return;
+      const shldAmt = TOTAL_ALEO * (100 - pubPct) / 100;
+      const delta = Math.round(shldAmt) - V3_INIT_SHIELDED;
+      goToConfirm(delta > 0, Math.abs(delta));
+    });
+
     function applyShld(p) {
-      const shldPct = Math.min(100, Math.max(0, p));
-      pubPct = 100 - shldPct;
+      pubPct = 100 - Math.min(100, Math.max(0, p));
       applyPub(pubPct);
     }
 
-    let dragging = null; // 'pub' | 'shld' | null
-    pub.pill.addEventListener('mousedown',  e => { dragging = 'pub';  applyPub(pub.pctFromEvent(e));  e.preventDefault(); });
-    pub.pill.addEventListener('touchstart', e => { dragging = 'pub';  applyPub(pub.pctFromEvent(e));  e.preventDefault(); }, { passive: false });
-    shld.pill.addEventListener('mousedown',  e => { dragging = 'shld'; applyShld(shld.pctFromEvent(e)); e.preventDefault(); });
-    shld.pill.addEventListener('touchstart', e => { dragging = 'shld'; applyShld(shld.pctFromEvent(e)); e.preventDefault(); }, { passive: false });
+    function animateV3BothNF() {
+      if (!v3NfReady) return;
+      const pubAmt  = TOTAL_ALEO * pubPct / 100;
+      const shldAmt = TOTAL_ALEO - pubAmt;
+      v3ShowNF(); /* visible first so number-flow can measure for animation */
+      v3PubNf.animated = v3ShldNf.animated = true;
+      requestAnimationFrame(() => {
+        if (v3UsdMode) {
+          v3PubNf.numberPrefix = v3ShldNf.numberPrefix = '$';
+          v3PubNf.update(Math.round(pubAmt * ALEO_PRICE));
+          v3ShldNf.update(Math.round(shldAmt * ALEO_PRICE));
+        } else {
+          v3PubNf.numberPrefix = v3ShldNf.numberPrefix = '';
+          v3PubNf.update(Math.round(pubAmt));
+          v3ShldNf.update(Math.round(shldAmt));
+        }
+      });
+    }
+
+    /* ── Drag handlers ── */
+    let v3WasDragging = false;
+    function startDrag(target, e) {
+      v3CardsEl.classList.add('v3-cards--dragging'); /* disable CSS transitions during drag */
+      /* Cancel any in-flight offset animation so drag tracks instantly */
+      pub.pill.classList.remove('v3-pill--offset-anim');
+      shld.pill.classList.remove('v3-pill--offset-anim');
+      v3DragTarget = target;
+      v3IsDragging = true;
+      v3ShowDrag();
+      target === 'pub' ? applyPub(pub.pctFromEvent(e)) : applyShld(shld.pctFromEvent(e));
+      e.preventDefault();
+    }
+
+    pub.pill.addEventListener('mousedown',  e => startDrag('pub', e));
+    pub.pill.addEventListener('touchstart', e => startDrag('pub', e), { passive: false });
+    shld.pill.addEventListener('mousedown',  e => startDrag('shld', e));
+    shld.pill.addEventListener('touchstart', e => startDrag('shld', e), { passive: false });
+
+    /* Pill-line (handle zone inside fill) also triggers drag */
+    const pubLine  = document.getElementById('v3PubPillLine');
+    const shldLine = document.getElementById('v3ShldPillLine');
+    pubLine.addEventListener('mousedown',  e => startDrag('pub',  e));
+    pubLine.addEventListener('touchstart', e => startDrag('pub',  e), { passive: false });
+    shldLine.addEventListener('mousedown',  e => startDrag('shld', e));
+    shldLine.addEventListener('touchstart', e => startDrag('shld', e), { passive: false });
+    pubLine.addEventListener('click',  e => e.stopPropagation());
+    shldLine.addEventListener('click', e => e.stopPropagation());
 
     document.addEventListener('mousemove', e => {
-      if (dragging === 'pub')  applyPub(pub.pctFromEvent(e));
-      if (dragging === 'shld') applyShld(shld.pctFromEvent(e));
+      if (v3DragTarget === 'pub')  applyPub(pub.pctFromEvent(e));
+      if (v3DragTarget === 'shld') applyShld(shld.pctFromEvent(e));
     });
     document.addEventListener('touchmove', e => {
-      if (dragging === 'pub')  { applyPub(pub.pctFromEvent(e));  e.preventDefault(); }
-      if (dragging === 'shld') { applyShld(shld.pctFromEvent(e)); e.preventDefault(); }
+      if (v3DragTarget === 'pub')  { applyPub(pub.pctFromEvent(e));  e.preventDefault(); }
+      if (v3DragTarget === 'shld') { applyShld(shld.pctFromEvent(e)); e.preventDefault(); }
     }, { passive: false });
-    document.addEventListener('mouseup',  () => { dragging = null; });
-    document.addEventListener('touchend', () => { dragging = null; });
 
-    applyPub(40); // initialise: pub=40%, shld=60%
+    function endV3Drag() {
+      if (!v3IsDragging) return;
+      v3CardsEl.classList.remove('v3-cards--dragging'); /* re-enable CSS transitions */
+      v3WasDragging = true;
+      v3IsDragging = false;
+      v3DragTarget = null;
+      /* stay in span mode — no NF reroll on drag release */
+      setTimeout(() => { v3WasDragging = false; }, 50);
+    }
+    document.addEventListener('mouseup',  endV3Drag);
+    document.addEventListener('touchend', endV3Drag);
 
-    // Re-render whenever the card becomes visible (offsetHeight is 0 while display:none)
-    new ResizeObserver(() => applyPub(pubPct)).observe(pub.card);
+    /* ── Input handling ── */
+    function v3FmtInput(inp) {
+      const prev = inp.value;
+      const stripped = prev.replace(/[$,]/g, '');
+      const cleaned  = stripped.replace(/[^\d]/g, '');
+      let formatted  = cleaned ? cleaned.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '';
+      if (v3UsdMode && formatted) formatted = '$' + formatted;
+      if (formatted !== prev) inp.value = formatted;
+    }
+
+    function v3BlurInput(inp, isPub) {
+      let raw = parseInt(inp.value.replace(/[$,]/g, ''), 10) || 0;
+      let aleoAmt = v3UsdMode ? Math.round(raw / ALEO_PRICE) : raw;
+      aleoAmt = Math.min(Math.max(aleoAmt, 0), TOTAL_ALEO);
+      const newPubPct = isPub
+        ? (aleoAmt / TOTAL_ALEO) * 100
+        : ((TOTAL_ALEO - aleoAmt) / TOTAL_ALEO) * 100;
+      withV3Transition(() => applyPub(newPubPct));
+
+      if (v3NfReady) {
+        const pubAmt  = TOTAL_ALEO * pubPct / 100;
+        const shldAmt = TOTAL_ALEO - pubAmt;
+        v3ShowNF(); /* visible first so number-flow can measure for animation */
+        /* edited card snaps (animated=false); other card rolls (animated=true) */
+        v3PubNf.animated  = !isPub;  /* pub is "other" when editing shld */
+        v3ShldNf.animated =  isPub;  /* shld is "other" when editing pub */
+        const _pub = pubAmt, _shld = shldAmt, _usd = v3UsdMode;
+        requestAnimationFrame(() => {
+          if (_usd) {
+            v3PubNf.numberPrefix = v3ShldNf.numberPrefix = '$';
+            v3PubNf.update(Math.round(_pub * ALEO_PRICE));
+            v3ShldNf.update(Math.round(_shld * ALEO_PRICE));
+          } else {
+            v3PubNf.numberPrefix = v3ShldNf.numberPrefix = '';
+            v3PubNf.update(Math.round(_pub));
+            v3ShldNf.update(Math.round(_shld));
+          }
+        });
+      } else {
+        v3ShowDrag();
+      }
+    }
+
+    v3PubInput.addEventListener('input', () => v3FmtInput(v3PubInput));
+    v3ShldInput.addEventListener('input', () => v3FmtInput(v3ShldInput));
+    v3PubInput.addEventListener('blur',  () => v3BlurInput(v3PubInput,  true));
+    v3ShldInput.addEventListener('blur',  () => v3BlurInput(v3ShldInput, false));
+
+    /* ── USD mode fade — same motion as V1 balance ── */
+    let v3IsSwapping = false;
+    function v3AnimateSwap() {
+      if (v3IsSwapping) return;
+      v3IsSwapping = true;
+      const dur = 150;
+      const ease = 'cubic-bezier(0.4, 0, 0.2, 1)';
+      v3ShowDrag(); /* ensure spans are visible for the fade animation */
+      const tokenEls = [v3PubSpan, v3ShldSpan];
+      const usdEls   = [v3PubUsdEl, v3ShldUsdEl];
+      const all = [...tokenEls, ...usdEls];
+
+      tokenEls.forEach(el => el.animate([
+        { opacity: 1, transform: 'translateY(0)' },
+        { opacity: 0, transform: 'translateY(6px)' }
+      ], { duration: dur, easing: ease, fill: 'forwards' }));
+      usdEls.forEach(el => el.animate([
+        { opacity: 1, transform: 'translateY(0)' },
+        { opacity: 0, transform: 'translateY(-6px)' }
+      ], { duration: dur, easing: ease, fill: 'forwards' }));
+
+      setTimeout(() => {
+        all.forEach(el => el.getAnimations().forEach(a => a.cancel()));
+        v3UsdMode = !v3UsdMode;
+        applyPub(pubPct);
+
+        const anims = [];
+        tokenEls.forEach(el => el.animate([
+          { opacity: 0, transform: 'translateY(-6px)' },
+          { opacity: 1, transform: 'translateY(0)' }
+        ], { duration: dur, easing: ease, fill: 'forwards' }));
+        usdEls.forEach(el => anims.push(el.animate([
+          { opacity: 0, transform: 'translateY(6px)' },
+          { opacity: 1, transform: 'translateY(0)' }
+        ], { duration: dur, easing: ease, fill: 'forwards' })));
+
+        anims[anims.length - 1].onfinish = () => {
+          all.forEach(el => el.getAnimations().forEach(a => a.cancel()));
+          v3IsSwapping = false;
+        };
+      }, dur);
+    }
+
+    /* ── Click on amounts: open input or toggle USD ── */
+    document.getElementById('v3PubAmounts').addEventListener('click', e => {
+      e.stopPropagation();
+      if (e.target.closest('.v3-card-usd')) { v3AnimateSwap(); return; }
+      if (e.target.tagName !== 'INPUT') {
+        const pubAmt = TOTAL_ALEO * pubPct / 100;
+        v3PubInput.value = v3UsdMode ? fmtUsd(Math.round(pubAmt * ALEO_PRICE)) : fmtAleo(Math.round(pubAmt));
+        v3ShowInput(true);
+        v3PubInput.focus();
+      }
+    });
+    document.getElementById('v3ShldAmounts').addEventListener('click', e => {
+      e.stopPropagation();
+      if (e.target.closest('.v3-card-usd')) { v3AnimateSwap(); return; }
+      if (e.target.tagName !== 'INPUT') {
+        const shldAmt = TOTAL_ALEO - (TOTAL_ALEO * pubPct / 100);
+        v3ShldInput.value = v3UsdMode ? fmtUsd(Math.round(shldAmt * ALEO_PRICE)) : fmtAleo(Math.round(shldAmt));
+        v3ShowInput(false);
+        v3ShldInput.focus();
+      }
+    });
+
+    /* ── Card click-to-set: clicking anywhere outside pill/amounts sets value ── */
+    pub.pill.addEventListener('click', e => e.stopPropagation());
+    shld.pill.addEventListener('click', e => e.stopPropagation());
+    function withV3Transition(fn) {
+      fn(); /* transitions are always-on via CSS; no class toggle needed */
+    }
+    pub.card.addEventListener('click', e => {
+      if (v3WasDragging) return;
+      if (e.target.closest('#v3PubAmounts') || e.target.closest('#v3PubPill')) return;
+      withV3Transition(() => applyPub(pub.pctFromEvent(e)));
+      animateV3BothNF();
+    });
+    shld.card.addEventListener('click', e => {
+      if (v3WasDragging) return;
+      if (e.target.closest('#v3ShldAmounts') || e.target.closest('#v3ShldPill')) return;
+      withV3Transition(() => applyShld(shld.pctFromEvent(e)));
+      animateV3BothNF();
+    });
+
+    /* ── Refresh ── */
+    document.getElementById('v3Refresh').addEventListener('click', () => {
+      applyPub(40);
+      animateV3BothNF();
+    });
+
+    /* ── Enable NF once the custom element is registered ── */
+    customElements.whenDefined('number-flow').then(() => {
+      v3NfReady = true;
+      const pubAmt  = TOTAL_ALEO * pubPct / 100;
+      const shldAmt = TOTAL_ALEO - pubAmt;
+      v3PubNf.animated = v3ShldNf.animated = false; /* snap without animation on load */
+      v3PubNf.numberPrefix = v3ShldNf.numberPrefix = '';
+      v3PubNf.update(Math.round(pubAmt));
+      v3ShldNf.update(Math.round(shldAmt));
+      v3ShowNF();
+    });
+
+    /* ── Init ── */
+    applyPub(40);
+    /* v3-cards--dragging is set in HTML by default so there are no transitions
+       until the card is visible and correctly measured. We only lift it once the
+       ResizeObserver sees a real (non-zero) card height. */
+    new ResizeObserver((entries) => {
+      const h = entries[0].contentRect.height;
+      if (h === 0) return;
+      v3CardsEl.classList.add('v3-cards--dragging');
+      applyPub(pubPct);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        v3CardsEl.classList.remove('v3-cards--dragging');
+      }));
+    }).observe(pub.card);
+
   })();
 
   /* ── V2: segmented control ── */
@@ -1420,6 +3265,22 @@
       updateV2Cta();
     });
   });
+
+  /* ── Token selection overlays ── */
+  ['v1', 'v3'].forEach(v => {
+    const row     = document.getElementById(v + 'TokenRow');
+    const overlay = document.getElementById(v + 'TokenOverlay');
+    const back    = document.getElementById(v + 'TokenBack');
+    if (!row || !overlay || !back) return;
+    row.addEventListener('click', () => overlay.classList.add('is-open'));
+    back.addEventListener('click', () => overlay.classList.remove('is-open'));
+    overlay.querySelectorAll('.token-overlay__item').forEach(item => {
+      item.addEventListener('click', () => overlay.classList.remove('is-open'));
+    });
+  });
 </script>
+
+<script type="module">import 'https://esm.sh/number-flow@0.5.9';</script>
+
 </body>
 </html>
