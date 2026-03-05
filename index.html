@@ -1555,64 +1555,49 @@
       background: none;
       padding: 0;
     }
-    .confirm-title {
+    .confirm-title-block {
       position: absolute;
       top: 74px;
       left: 50%;
       transform: translateX(-50%);
+      width: 183px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .confirm-title {
       font-family: 'Innovator Grotesk', sans-serif;
       font-weight: 600;
       font-size: 32px;
-      line-height: 1;
+      line-height: 1.12;
+      letter-spacing: -0.64px;
       text-align: center;
       color: white;
-      letter-spacing: -1.28px;
-      white-space: nowrap;
+      width: 100%;
     }
-    .confirm-from {
-      position: absolute;
-      top: 122px;
-      left: 50%;
-      transform: translateX(-50%);
+    .confirm-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+    }
+    .confirm-amount {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 17px;
+      line-height: 1.4;
+      color: white;
+    }
+    .confirm-token-badge {
       display: flex;
       align-items: center;
       gap: 8px;
     }
-    .confirm-from-text {
-      font-family: 'Innovator Grotesk', sans-serif;
-      font-weight: 500;
-      font-size: 15px;
-      line-height: 1;
-      color: white;
-      opacity: 0.5;
-    }
-    .confirm-from-dot {
-      width: 20px;
-      height: 20px;
-      border-radius: 999px;
-      background: linear-gradient(225deg, #fd2d72 0%, #226ac3 100%);
-    }
-    .confirm-card {
-      position: absolute;
-      top: 158px;
-      left: 16px;
-      width: 328px;
-      height: 142px;
-      border-radius: 24px;
-      background: linear-gradient(0deg, rgba(255,255,255,0.08) 27%, rgba(255,255,255,0) 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .confirm-card-inner {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
-    }
     .confirm-token-icon {
-      width: 40px;
-      height: 40px;
+      width: 24px;
+      height: 24px;
       border-radius: 999px;
       border: 1px solid rgba(255,255,255,0.1);
       background: #090707;
@@ -1621,82 +1606,113 @@
       align-items: center;
       justify-content: center;
     }
-    .confirm-token-icon img { width: 32px; height: 32px; }
-    .confirm-amounts {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 8px;
-    }
-    .confirm-amount {
+    .confirm-token-icon img { width: 20px; height: 20px; }
+    .confirm-token-badge span {
       font-family: 'Innovator Grotesk', sans-serif;
       font-weight: 600;
       font-size: 17px;
-      line-height: 1;
+      line-height: 1.4;
       color: white;
     }
-    .confirm-usd {
+    .confirm-wallet {
+      position: absolute;
+      top: 158px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .confirm-from-dot {
+      width: 20px;
+      height: 20px;
+      border-radius: 999px;
+      background: linear-gradient(225deg, #fd2d72 0%, #226ac3 100%);
+      flex-shrink: 0;
+    }
+    .confirm-wallet-text {
       font-family: 'Innovator Grotesk', sans-serif;
       font-weight: 500;
-      font-size: 13px;
-      line-height: 1;
+      font-size: 15px;
+      line-height: 1.4;
       color: white;
-      opacity: 0.48;
+      opacity: 0.5;
     }
-    .confirm-direction {
+    .confirm-card-v2 {
       position: absolute;
-      top: 300px;
+      top: 211px;
       left: 16px;
       width: 328px;
-      height: 97px;
+      height: 174px;
     }
-    .confirm-direction-bg {
+    .confirm-card-v2 .confirm-panel {
       position: absolute;
-      bottom: 0;
       left: 0;
       width: 328px;
-      height: 81px;
+      height: 79px;
       border-radius: 24px;
-      background: rgba(255,255,255,0.08);
+      background: linear-gradient(0deg, rgba(255,255,255,0.08) 27%, rgba(255,255,255,0) 100%);
     }
-    .confirm-direction-bridge {
+    .confirm-card-v2 .confirm-panel--top { top: 0; }
+    .confirm-card-v2 .confirm-panel--bottom {
+      top: 95px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.08) 27%, rgba(255,255,255,0) 100%);
+    }
+    .confirm-card-bridge {
       position: absolute;
-      top: 0;
+      top: 79px;
       left: 50%;
       transform: translateX(-50%);
       width: 62px;
       height: 16px;
+      z-index: 1;
     }
-    .confirm-direction-row {
+    .confirm-card-bridge img { width: 100%; height: 100%; object-fit: contain; }
+    .confirm-card-arrow {
       position: absolute;
-      bottom: 20px;
-      left: 0;
-      width: 328px;
+      top: 80px;
+      left: 50%;
+      transform: translate(-50%, 0);
+      width: 14px;
+      height: 12px;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .confirm-card-arrow img { width: 14px; height: 12px; display: block; }
+    .confirm-card-row {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 288px;
       display: flex;
       align-items: center;
       justify-content: space-between;
     }
-    .confirm-dir-col {
-      flex: 1;
+    .confirm-card-row--before { top: 20px; }
+    .confirm-card-row--after { top: 115px; }
+    .confirm-card-col {
       display: flex;
       flex-direction: column;
-      align-items: center;
-      gap: 8px;
+      gap: 4px;
     }
-    .confirm-dir-label {
+    .confirm-card-col--end { align-items: flex-end; text-align: right; }
+    .confirm-card-label {
       font-family: 'ABC Diatype Mono', monospace;
-      font-weight: 700;
-      font-size: 13px;
+      font-weight: 500;
+      font-size: 11px;
       line-height: 1;
-      letter-spacing: 0.39px;
+      letter-spacing: 0.33px;
       text-transform: uppercase;
-      color: white;
+      color: rgba(255,255,255,0.48);
     }
-    .confirm-dir-arrow {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    .confirm-card-value {
+      font-family: 'Innovator Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 17px;
+      line-height: 1.4;
+      color: white;
     }
     .confirm-fee {
       position: absolute;
@@ -2226,42 +2242,48 @@
             <img src="assets/chevron-left.svg" width="20" height="20" alt="Back" />
           </button>
         </div>
-        <h1 class="confirm-title" id="confirmTitle">Shielding</h1>
-        <div class="confirm-from">
-          <span class="confirm-from-text">From</span>
-          <div class="confirm-from-dot"></div>
-          <span class="confirm-from-text">1BHfd...nSUh</span>
-        </div>
-        <div class="confirm-card">
-          <div class="confirm-card-inner">
-            <div class="confirm-token-icon">
-              <img src="assets/aleo-token-v1.svg" alt="" />
-            </div>
-            <div class="confirm-amounts">
-              <span class="confirm-amount" id="confirmAmount">2,342.5 ALEO</span>
-              <span class="confirm-usd" id="confirmUsd">$1,737.25</span>
+        <div class="confirm-title-block">
+          <h1 class="confirm-title" id="confirmTitle">Shielding</h1>
+          <div class="confirm-title-row">
+            <span class="confirm-amount" id="confirmAmount">23,232,123</span>
+            <div class="confirm-token-badge">
+              <div class="confirm-token-icon"><img src="assets/aleo-token-v1.svg" alt="" /></div>
+              <span>ALEO</span>
             </div>
           </div>
         </div>
-        <div class="confirm-direction">
-          <div class="confirm-direction-bg"></div>
-          <img class="confirm-direction-bridge" src="assets/mid.png" alt="" />
-          <div class="confirm-direction-row">
-            <div class="confirm-dir-col">
-              <img src="assets/icon-private.svg" width="20" height="20" alt="" id="confirmFromIcon" />
-              <span class="confirm-dir-label" id="confirmFromLabel">Public</span>
+        <div class="confirm-wallet">
+          <div class="confirm-from-dot"></div>
+          <span class="confirm-wallet-text" id="confirmWalletName">Wallet name</span>
+        </div>
+        <div class="confirm-card-v2">
+          <div class="confirm-panel confirm-panel--top"></div>
+          <div class="confirm-panel confirm-panel--bottom"></div>
+          <div class="confirm-card-bridge"><img src="assets/mid.png" alt="" /></div>
+          <div class="confirm-card-arrow"><img src="assets/arrow.svg" alt="" /></div>
+          <div class="confirm-card-row confirm-card-row--before">
+            <div class="confirm-card-col">
+              <span class="confirm-card-label">Public</span>
+              <span class="confirm-card-value" id="confirmPublicBefore">100,000</span>
             </div>
-            <div class="confirm-dir-arrow">
-              <img src="assets/arrow-right.svg" width="14" height="12" alt="" />
+            <div class="confirm-card-col confirm-card-col--end">
+              <span class="confirm-card-label">Shielded</span>
+              <span class="confirm-card-value" id="confirmShieldedBefore">0</span>
             </div>
-            <div class="confirm-dir-col">
-              <img src="assets/confirm-icon-private.svg" width="20" height="20" alt="" id="confirmToIcon" />
-              <span class="confirm-dir-label" id="confirmToLabel">Private</span>
+          </div>
+          <div class="confirm-card-row confirm-card-row--after">
+            <div class="confirm-card-col">
+              <span class="confirm-card-label">Public</span>
+              <span class="confirm-card-value" id="confirmPublicAfter">0</span>
+            </div>
+            <div class="confirm-card-col confirm-card-col--end">
+              <span class="confirm-card-label">Shielded</span>
+              <span class="confirm-card-value" id="confirmShieldedAfter">100,000</span>
             </div>
           </div>
         </div>
         <span class="confirm-fee">No network fee</span>
-        <button class="confirm-send-btn" id="confirmSendBtn"><span>Send</span></button>
+        <button class="confirm-send-btn" id="confirmSendBtn"><span>Confirm</span></button>
       </div>
     </div><!-- /page-confirm -->
 
@@ -2349,26 +2371,21 @@
   });
 
   /* Shield CTA → Confirm */
-  function goToConfirm(isShielding, aleoAmt) {
+  function goToConfirm(isShielding, aleoAmt, publicBefore, shieldedBefore) {
     document.getElementById('confirmTitle').textContent = isShielding ? 'Shielding' : 'Unshielding';
-    document.getElementById('confirmAmount').textContent = fmtAleo(aleoAmt) + ' ALEO';
-    document.getElementById('confirmUsd').textContent = fmtUsd(aleoAmt * ALEO_PRICE);
+    document.getElementById('confirmAmount').textContent = fmtAleo(aleoAmt);
 
-    const fromIcon = document.getElementById('confirmFromIcon');
-    const toIcon = document.getElementById('confirmToIcon');
-    const fromLabel = document.getElementById('confirmFromLabel');
-    const toLabel = document.getElementById('confirmToLabel');
+    const pubBefore = publicBefore != null ? publicBefore : (TOTAL_ALEO - Math.round(TOTAL_ALEO * 0.5));
+    const shldBefore = shieldedBefore != null ? shieldedBefore : Math.round(TOTAL_ALEO * 0.5);
 
+    document.getElementById('confirmPublicBefore').textContent = fmtAleo(pubBefore);
+    document.getElementById('confirmShieldedBefore').textContent = fmtAleo(shldBefore);
     if (isShielding) {
-      fromIcon.src = 'assets/confirm-icon-public.svg';
-      toIcon.src = 'assets/confirm-icon-private.svg';
-      fromLabel.textContent = 'Public';
-      toLabel.textContent = 'Private';
+      document.getElementById('confirmPublicAfter').textContent = fmtAleo(Math.max(0, pubBefore - aleoAmt));
+      document.getElementById('confirmShieldedAfter').textContent = fmtAleo(shldBefore + aleoAmt);
     } else {
-      fromIcon.src = 'assets/confirm-icon-private.svg';
-      toIcon.src = 'assets/confirm-icon-public.svg';
-      fromLabel.textContent = 'Private';
-      toLabel.textContent = 'Public';
+      document.getElementById('confirmPublicAfter').textContent = fmtAleo(pubBefore + aleoAmt);
+      document.getElementById('confirmShieldedAfter').textContent = fmtAleo(Math.max(0, shldBefore - aleoAmt));
     }
 
     navigateTo('page-confirm');
@@ -2475,8 +2492,9 @@
     v1Cta.addEventListener('click', () => {
       if (!v1Cta.classList.contains('is-active')) return;
       const currentShielded = Math.round(TOTAL_ALEO * pct / 100);
+      const currentPublic = TOTAL_ALEO - currentShielded;
       const delta = currentShielded - V1_INIT_SHIELDED;
-      goToConfirm(delta > 0, Math.abs(delta));
+      goToConfirm(delta > 0, Math.abs(delta), currentPublic, currentShielded);
     });
 
     function refreshCards() {
@@ -3057,9 +3075,10 @@
 
     v3Cta.addEventListener('click', () => {
       if (!v3Cta.classList.contains('is-active')) return;
-      const shldAmt = TOTAL_ALEO * (100 - pubPct) / 100;
-      const delta = Math.round(shldAmt) - V3_INIT_SHIELDED;
-      goToConfirm(delta > 0, Math.abs(delta));
+      const pubAmt = Math.round(TOTAL_ALEO * pubPct / 100);
+      const shldAmt = Math.round(TOTAL_ALEO - pubAmt);
+      const delta = shldAmt - V3_INIT_SHIELDED;
+      goToConfirm(delta > 0, Math.abs(delta), pubAmt, shldAmt);
     });
 
     function applyShld(p) {
